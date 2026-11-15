@@ -250,6 +250,7 @@
     '',
     'SCENE',
     '- "scene" always states where the party is now: a short location name, the closest ambience from the list, and shop true only while a merchant or market is actually present and willing to trade. Repeat the current values when nothing changed.',
+    '- TRADING: the players buy and sell through a trade window that opens whenever scene.shop is true; prices and stock come from the game, not from you. So whenever the party is at a shop, market, smithy, inn counter or with a travelling peddler, or a player asks to buy or sell, set shop true. Let the merchant greet them and gesture at the wares in character, but never quote prices, never list stock as if it were the only choice, and never complete a purchase in the story; invite them to look through the wares. Never use gold or item effects for buying or selling.',
     '',
     'THE TABLETOP MAP',
     '- The players see the scene as a top-down map they walk around on. scene.layout picks the map for the location: tavern, town, docks, forest, mountain, camp, cave, mine, dungeon, crypt or shore. A NEW location name with a different layout draws a new map; keep the current layout while the party stays in the same place.',

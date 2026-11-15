@@ -498,14 +498,15 @@ async function postForAudio(E, url, headers, body, timeoutMs, onHttpError, read)
  * those, a paid plan can use them. Marked: [ok] spoke live, [402]/[404] refused live, [?] not tried.
  */
 const ELEVEN_CAST = {
-  narrator: ['JBFqnCBsd6RMkjVDRZzb', 'nPczCjzI2devNBz1zQrb', '6WwXjDDEMyNmFG95zycZ', '8dEUmyPMdDdK91vboYih'],   // George [ok], Brian [?], Eldrin [402], Sawyer [?]
-  gruff: ['SOYHLrjzK2X1ezoPC6cr', 'pNInz6obpgDQGcFmaJgB', '10NkTYmU7tSz3Kkl3Lex'],                               // Harry [ok], Adam [ok], Kaelen [402]
-  sage: ['pqHfZKP75CvOlQylNhV4', 'FrS6cKLB1wg4WYgPa9GW'],                                                         // Bill [ok], Wyatt [402]
-  young: ['cgSgspJ2msm6clMCkdW9', 'TX3LPaxmHKxFdv7VOQHJ', 'g7LVvkPWALzPxOQbF6OE'],                               // Jessica [ok], Liam [?], Jade [402]
-  sinister: ['N2lVS1w4EtoT3dr4eOWO', 'fs2OqxduwXgp9foh2xjK'],                                                     // Callum [ok], Callum replacement [404]
-  noble: ['pFZP5JQG7iQjIQuC4Bku', 'Xb7hH8MSUJpSbSDYk0k2', '22N9cF8z0o7y23njdyaY'],                               // Lily [ok], Alice [?], Florence [402]
-  cheerful: ['XrExE9yKIg1WjnnlVkGX', 'FGY2WhTYpPnrIDTdsKH5', 'QtY3JBOUKEB5xzrRfOKc'],                            // Matilda [ok], Laura [?], Maisie [402]
-  creature: ['pNInz6obpgDQGcFmaJgB', 'nPczCjzI2devNBz1zQrb', 'N2lVS1w4EtoT3dr4eOWO'],                            // Adam [ok], Brian [?], Callum [ok]
+  // Paid plans can use the Voice Library voices, which are tried first; the stock voices are the fallback.
+  narrator: ['8dEUmyPMdDdK91vboYih', '6WwXjDDEMyNmFG95zycZ', 'JBFqnCBsd6RMkjVDRZzb', 'nPczCjzI2devNBz1zQrb'],   // Sawyer (midnight storyteller), Eldrin (British baritone), George, Brian
+  gruff: ['10NkTYmU7tSz3Kkl3Lex', 'SOYHLrjzK2X1ezoPC6cr', 'pNInz6obpgDQGcFmaJgB'],                               // Kaelen (warrior), Harry, Adam
+  sage: ['FrS6cKLB1wg4WYgPa9GW', 'pqHfZKP75CvOlQylNhV4'],                                                         // Wyatt (seasoned mentor), Bill
+  young: ['g7LVvkPWALzPxOQbF6OE', 'cgSgspJ2msm6clMCkdW9', 'TX3LPaxmHKxFdv7VOQHJ'],                               // Jade, Jessica, Liam
+  sinister: ['N2lVS1w4EtoT3dr4eOWO', 'fs2OqxduwXgp9foh2xjK'],                                                     // Callum (husky trickster)
+  noble: ['22N9cF8z0o7y23njdyaY', 'pFZP5JQG7iQjIQuC4Bku', 'Xb7hH8MSUJpSbSDYk0k2'],                               // Florence (atmospheric storyteller), Lily, Alice
+  cheerful: ['QtY3JBOUKEB5xzrRfOKc', 'XrExE9yKIg1WjnnlVkGX', 'FGY2WhTYpPnrIDTdsKH5'],                            // Maisie (friendly neighbour), Matilda, Laura
+  creature: ['pNInz6obpgDQGcFmaJgB', 'N2lVS1w4EtoT3dr4eOWO', 'nPczCjzI2devNBz1zQrb'],                            // Adam, Callum, Brian
 };
 
 /* One loopable bed per ambience value (everything in the enum except 'none'). */
