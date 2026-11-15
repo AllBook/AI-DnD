@@ -387,3 +387,21 @@ body.busy .dock button, body.busy .inv button, body.busy .lobby button, body.bus
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* The visual tabletop (table.js) takes real height. Keep the play frame from overflowing: the
+   table scales with the window, the feed gives up space first, and the composer slims down. */
+@media (min-width: 861px) {
+  body.playing .tabletop { aspect-ratio: auto; height: clamp(190px, 25vh, 300px); max-height: none; min-height: 0; }
+  body.playing .log-wrap { flex: 1 0 110px; }
+  body.playing .say textarea { min-height: 3.1em; }
+  body.playing .dock { max-height: 38%; }
+}
+/* On laptop-height windows give the story more room: a lower table and a one-line action row. */
+@media (min-width: 861px) and (max-height: 960px) {
+  body.playing .tabletop { height: clamp(190px, 22vh, 300px); }
+  body.playing .log-wrap { flex-basis: 90px; }
+  body.playing .dock .qa button small { display: none; }
+  body.playing .dock { padding-block: 10px; }
+  body.playing .say textarea { min-height: 2.6em; }
+  body.playing .col-main { gap: 10px; }
+}
