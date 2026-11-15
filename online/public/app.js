@@ -600,6 +600,7 @@
   /** A character picture: player { race, cls, look, eq, name }, opts { view, size, pose, facing, animate }. */
   function figureOf(p, opts) {
     const o = Object.assign({ view: 'bust', size: 48, pose: 'idle', facing: 'right', animate: false }, opts || {});
+    if (o.view === 'bust' && !o.frame) o.frame = 'round';
     const who = { race: raceOf(p), look: p && p.look ? p.look : undefined, name: (p && p.name) || '' };
     if (p && p.cls) who.cls = p.cls;
     if (p && p.eq) who.eq = p.eq;
@@ -773,12 +774,13 @@
       h('div', { class: 'picks' }, Object.keys(CLASSES).map((name) => {
         const c = CLASSES[name];
         const eq = classEq(name);
-        const raw = { atk: c.atk, def: c.def, eq, fx: [] };
+        // numbers as this race would have them with the class's suggested scores
+        const cs = ccStats(Object.assign({}, d, { cls: name, method: 'array', arr: d.cls === name ? ccBase(d) : suggestedArr(name) }));
         const abil = abilitiesOf({ cls: name, race: d.race }).map((id) => ABILITIES[id].name);
-        const sp = classSpells(name).map((id) => SPELLS[id].name);
+        const sp = classSpells(name).map((id) => SPELLS[id].name).filter((n) => !abil.includes(n));
         return choice('cc-cls-' + name, d.cls === name, () => ccPickClass(name), [
           h('span', { class: 'pick-top' }, figureOf({ race: d.race, look: d.look, cls: name, eq }, { view: 'bust', size: 56 }),
-            h('span', { class: 'pick-name' }, h('b', null, name), h('code', null, `HP ${c.hp} · ATK ${atkOf(raw)} · DEF ${defOf(raw)} · Move ${c.speed || 6}`))),
+            h('span', { class: 'pick-name' }, h('b', null, name), h('code', null, `HP ${cs.hp} · ATK ${cs.atk} · DEF ${cs.def} · Move ${cs.speed}`))),
           h('span', { class: 'pick-desc' }, c.blurb || ''),
           h('span', { class: 'pick-fx' }, h('em', null, 'Key: '), (c.primary || []).join(', '), ' · ', abil.concat(sp).join(', '))]);
       }))];
@@ -912,7 +914,7 @@
     const phone = narrow();
     const last = cc.step === STEPS.length - 1;
     const body = [ccRaceStep, ccClassStep, ccBackgroundStep, ccAbilityStep, ccLookStep, ccDetailStep][cc.step];
-    const preview = figureOf({ race: d.race, cls: d.cls, look: d.look, eq: d.cls ? classEq(d.cls) : null, name: p.name }, { view: 'full', size: phone ? 200 : 300, pose: 'ready', animate: true });
+    const preview = figureOf({ race: d.race, cls: d.cls, look: d.look, eq: d.cls ? classEq(d.cls) : null, name: p.name }, { view: 'full', size: phone ? 220 : 320, pose: 'ready', animate: true });
     const done = (i) => (i === 1 ? !!d.cls : i < cc.step || (i === 3 && d.touched));
     const createLabel = cc.busy ? 'Saving…' : editing ? 'Save changes' : 'Create character';
     return h('div', { class: 'cc', id: 'creator' },
@@ -1093,7 +1095,7 @@
   // GET /api/tables lists the parties whose host lets them be found. Refreshed every 10 s
   // while the join screen shows.
 
-  const tbl = { data: null, err: '', at: 0, loading: false, want: null };
+  const tbl = { data: null, err: '', at: 0, loading: false, want: null, all: false };
   const tablesOn = () => netReady && !!N && !isArtifact() && !(session && state);
   const ago = (t) => {
     const s = Math.max(0, (Date.now() - Number(t || 0)) / 1000);
@@ -1154,7 +1156,7 @@
           figureOf(q, { view: 'bust', size: 46 }),
           h('span', { class: 'tc-who' },
             h('b', null, h('i', { class: 'dot' + (q.online ? '' : ' off'), title: q.online ? 'Online now' : 'Away' }), q.name),
-            h('small', null, q.cls ? `${q.race || 'Human'} ${q.cls} · Lv ${q.level || 1}` : 'creating a character')))),
+            h('small', null, q.cls ? `${q.race || 'Human'} ${q.cls} · Lv\u00a0${q.level || 1}` : 'creating a character')))),
         t.seats > 0 && h('li', { class: 'seat' }, h('span', { class: 'cfig cfig-bust seat-empty', 'aria-hidden': 'true' }),
           h('span', { class: 'tc-who' }, h('small', null, t.seats === 1 ? 'Open seat' : 'Open seats')))),
       h('div', { class: 'tc-foot' },
@@ -1180,12 +1182,18 @@
       : (listedOnline ? `${plural(listedOnline, 'person', 'people')} playing now in ${plural(live.length, 'party', 'parties')}` : 'Nobody is at an open table right now')
         + (priv ? ` · ${priv} more at private tables` : '');
     const minute = Math.floor(Date.now() / 60000);
-    paint('tables', $('tablesList'), [tables, tbl.err, tbl.want, savedCode, minute, cfVer(), !!d], () => {
+    paint('tables', $('tablesList'), [tables, tbl.err, tbl.want, savedCode, minute, cfVer(), !!d, !!tbl.all], () => {
       if (!d) return h('p', { class: 'hint' }, tbl.err || 'Loading…');
       const kids = [];
       if (tbl.err) kids.push(h('p', { class: 'note' }, tbl.err));
       if (!tables.length) kids.push(h('div', { class: 'tables-empty' }, h('b', null, 'No open tables right now.'), h('span', null, 'Create one and your friends can find it here.')));
-      return kids.concat(tables.map((t) => tableCard(t, savedCode)));
+      // People playing right now come first; quiet tables (nobody online) fold away after a few.
+      const quiet = tables.filter((t) => !(t.online > 0) && t.code !== savedCode);
+      const keep = tbl.all ? quiet.length : live.length ? 2 : 4;
+      const shown = tables.filter((t) => !quiet.includes(t) || quiet.indexOf(t) < keep);
+      kids.push(shown.map((t) => tableCard(t, savedCode)));
+      if (quiet.length > keep) kids.push(h('button', { type: 'button', class: 'ghost more', 'data-k': 'tables-more', onclick: () => { tbl.all = true; renderTables(); } }, `Show ${plural(quiet.length - keep, 'more quiet table', 'more quiet tables')}`));
+      return kids;
     });
   }
 
@@ -1513,7 +1521,7 @@
             figureOf(p, { view: 'bust', size: 52, pose: p.cls && !p.alive ? 'down' : 'idle' }),
             h('div', { class: 'nm' },
               h('b', null, h('i', { class: 'dot' + (p.online === false ? ' off' : '') }), p.name + (id === myId ? ' (you)' : '')),
-              h('span', null, p.cls ? `${raceOf(p)} ${p.cls} · Lv ${p.level}` : 'creating a character…'))),
+              h('span', null, p.cls ? `${raceOf(p)} ${p.cls} · Lv\u00a0${p.level}` : 'creating a character…'))),
           !!p.cls && bar('hp', p.hp, p.maxHp),
           !!p.cls && bar('mp', p.mana, p.maxMana),
           !!p.cls && h('div', { class: 'nums' }, h('span', null, `HP ${p.hp}/${p.maxHp}`), h('span', null, `MP ${p.mana}/${p.maxMana}`)),

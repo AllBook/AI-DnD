@@ -642,6 +642,7 @@ body.busy .trade-dlg button { opacity: .6; pointer-events: none; }
 .cfig { display: inline-flex; flex: none; align-items: flex-end; justify-content: center; line-height: 0; max-width: 100%; }
 .cfig svg { display: block; max-width: 100%; height: auto; }
 .cfig-bust { border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 50% 38%, #2f3b42 0, #1a2227 62%, #10151a 100%); box-shadow: inset 0 0 0 1px var(--line); }
+.cfig-bust:not(.cfig-plain) { background: none; box-shadow: none; }
 .cf-fallback { fill: var(--slate-2); stroke: var(--line); stroke-width: 1.5; }
 .cf-fallback.down { opacity: .5; }
 .seat-empty { width: 46px; height: 46px; background: transparent; box-shadow: none; border: 1px dashed var(--line); }
@@ -799,8 +800,8 @@ body.busy .trade-dlg button { opacity: .6; pointer-events: none; }
 .mychar .bio { font-style: italic; color: var(--muted); overflow-wrap: anywhere; }
 @media (max-width: 620px) {
   .cc-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .cc-side { position: static; display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 10px; align-items: start; }
-  .cc-stage { min-height: 214px; padding: 6px 4px 4px; }
+  .cc-side { position: static; display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 10px; align-items: stretch; }
+  .cc-stage { min-height: 226px; padding: 4px 2px 2px; }
   .cc-quick .scores { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .cc-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .cc-steps button { width: 100%; padding: 6px 6px; font-size: .84rem; }
@@ -830,3 +831,4 @@ body.busy .trade-dlg button { opacity: .6; pointer-events: none; }
 @media (max-width: 380px) {
   .hero-fig { min-width: 0; padding: 6px; }
 }
+.tables-list > button.more { align-self: center; }
