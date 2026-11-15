@@ -757,6 +757,8 @@
     const allies = [];
     const comp = room.story.companion;
     if (comp) {
+      // The companion fights as an ally token, so their standing NPC token leaves the map.
+      if (room.map) room.map.objects = room.map.objects.filter((o) => !(o.kind === 'npc' && same(o.name, comp.name)));
       const ally = Object.assign({}, comp, { fx: [], alive: true, hp: comp.maxHp });
       if (room.map) ally.pos = Maps.freeNear(room.map, centre(room), new Set([...blockers(room).all].concat(enemies.filter((e) => e.pos).map((e) => K(e.pos)))), 1, 1)[0] || null;
       allies.push(ally);
