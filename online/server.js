@@ -61,6 +61,23 @@ const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 function randomCode(n, alphabet) { let c = ''; for (let i = 0; i < n; i++) c += alphabet[crypto.randomInt(alphabet.length)]; return c; }
 function newCode() { for (;;) { const c = randomCode(4, LETTERS); if (!rooms.has(c)) return c; } }
 
+const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex').slice(0, 32);
+/** A seat: the secret token, the six-character rejoin code, and their hashes (sent to clients for restores). */
+function makeSeat(token, rejoin, th, rh) { return { token: token || null, rejoin: rejoin || null, th: th || (token ? sha(token) : ''), rh: rh || (rejoin ? sha(rejoin) : '') }; }
+/** Does `given` (a token or a rejoin code) open this seat? */
+function opens(st, given) {
+  const g = String(given || '').trim(), G = g.toUpperCase();
+  if (!g) return false;
+  return (st.token && st.token === g) || (st.rejoin && st.rejoin === G) || (st.th && st.th === sha(g)) || (st.rh && st.rh === sha(G));
+}
+/** Hand out the seat's token, minting one if the seat came from a restore and only its hash is known. */
+function claim(st, given, pid) {
+  if (!st.token) { st.token = crypto.randomBytes(16).toString('hex'); st.th = sha(st.token); }
+  const G = String(given || '').trim().toUpperCase();
+  if (!st.rejoin && st.rh && sha(G) === st.rh) st.rejoin = G;
+  return { token: st.token, playerId: pid, rejoin: st.rejoin || '' };
+}
+
 function newEntry(room) { return { room, seats: new Map(), clients: new Set(), pumping: false, last: {}, spoken: { day: '', n: 0 }, saveTimer: null }; }
 
 // ---------------------------------------------------------------- persistence
@@ -70,7 +87,7 @@ function save(entry) {
   entry.saveTimer = setTimeout(() => {
     entry.saveTimer = null;
     const file = path.join(ROOM_DIR, entry.room.code + '.json');
-    const body = JSON.stringify({ room: entry.room, seats: [...entry.seats].map(([pid, s]) => [pid, s.token, s.rejoin]), spoken: entry.spoken });
+    const body = JSON.stringify({ room: entry.room, seats: [...entry.seats].map(([pid, s]) => [pid, s.token, s.rejoin, s.th, s.rh]), spoken: entry.spoken });
     fs.mkdir(ROOM_DIR, { recursive: true }, (err) => {
       if (err) return;
       fs.writeFile(file + '.tmp', body, (err2) => { if (!err2) fs.rename(file + '.tmp', file, () => {}); });
@@ -90,7 +107,7 @@ function loadRooms() {
       // A Dungeon Master call that was in flight when the server stopped is asked again.
       if (room.dm.busy) { room.dm.queue = (room.dm.busy.intents || []).concat(room.dm.queue); room.dm.busy = null; }
       const entry = newEntry(room);
-      (saved.seats || []).forEach(([pid, token, rejoin]) => { if (room.players[pid]) entry.seats.set(pid, { token, rejoin }); });
+      (saved.seats || []).forEach(([pid, token, rejoin, th, rh]) => { if (room.players[pid]) entry.seats.set(pid, makeSeat(token, rejoin, th, rh)); });
       if (saved.spoken) entry.spoken = saved.spoken;
       rooms.set(room.code, entry);
     } catch (err) { console.warn('could not restore', f, err.message); }
@@ -103,7 +120,9 @@ function loadRooms() {
 function snapshot(entry) {
   const room = entry.room;
   const check = room.dm.check ? { pid: room.dm.check.pid, ability: room.dm.check.ability, dc: room.dm.check.dc, reason: room.dm.check.reason, at: room.dm.check.at } : null;
-  return JSON.stringify(Object.assign({}, room, { dm: Object.assign({}, room.dm, { check }) }));
+  const seatKeys = {};
+  for (const [pid, st] of entry.seats) seatKeys[pid] = [st.th, st.rh];
+  return JSON.stringify(Object.assign({}, room, { dm: Object.assign({}, room.dm, { check }), seatKeys }));
 }
 
 function broadcast(entry) {
@@ -193,10 +212,11 @@ async function pump(entry) {
 
 // ---------------------------------------------------------------- http helpers
 
-function readJson(req) {
+function readJson(req, limit) {
+  limit = limit || 8192;
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', (chunk) => { body += chunk; if (body.length > 8192) { reject(new Error('too large')); req.destroy(); } });
+    req.on('data', (chunk) => { body += chunk; if (body.length > limit) { reject(new Error('too large')); req.destroy(); } });
     req.on('end', () => { try { resolve(body ? JSON.parse(body) : {}); } catch (e) { reject(e); } });
     req.on('error', reject);
   });
@@ -208,20 +228,23 @@ function send(res, status, obj) {
 function auth(code, token) {
   const entry = rooms.get(String(code || '').toUpperCase());
   if (!entry || !token) return {};
-  for (const [pid, s] of entry.seats) if (s.token === token) return { entry, pid };
+  for (const [pid, s] of entry.seats) if (s.token && s.token === token) return { entry, pid };
   return { entry };
 }
 
 function seat(entry, name, token) {
   const given = String(token || '').trim();
   if (given) {
-    for (const [pid, s] of entry.seats) if (s.token === given || s.rejoin === given.toUpperCase()) return { token: s.token, playerId: pid, rejoin: s.rejoin };
-    return { error: 'Your seat in this party is gone. Join again as a new adventurer.' };
+    for (const [pid, s] of entry.seats) if (opens(s, given)) return claim(s, given, pid);
+    return { error: 'That code does not match a seat in this party. Check your rejoin code (Settings, in the game), or join as a new adventurer by leaving the code box with just the party code.', badToken: true };
   }
+  // Someone with the same name already sits here: almost always the same person on a new device.
+  const clash = entry.room.order.map((id) => entry.room.players[id]).find((p) => p && p.name.toLowerCase() === String(name || '').trim().toLowerCase());
+  if (clash) return { error: `${clash.name} already has a seat at this table. If that is you, type your rejoin code into the code box to take it back. Otherwise pick another name.`, nameTaken: true };
   const playerId = 'p' + crypto.randomBytes(5).toString('hex');
   const r = Engine.addPlayer(entry.room, playerId, name);
   if (!r.ok) return { error: r.error };
-  const s = { token: crypto.randomBytes(16).toString('hex'), rejoin: randomCode(6, LETTERS + '23456789') };
+  const s = makeSeat(crypto.randomBytes(16).toString('hex'), randomCode(6, LETTERS + '23456789'));
   entry.seats.set(playerId, s);
   return { token: s.token, playerId, rejoin: s.rejoin };
 }
@@ -268,7 +291,7 @@ const server = http.createServer(async (req, res) => {
       const code = String(body.code || '').toUpperCase().trim();
       if (code.length === 6) {
         // A rejoin code: reclaim an existing seat from any device.
-        for (const [roomCode, e] of rooms) for (const [pid, st] of e.seats) if (st.rejoin === code) return send(res, 200, { code: roomCode, token: st.token, playerId: pid, rejoin: st.rejoin });
+        for (const [roomCode, e] of rooms) for (const [pid, st] of e.seats) if (opens(st, code) && (st.rejoin === code || st.rh === sha(code))) { const out = claim(st, code, pid); save(e); return send(res, 200, Object.assign({ code: roomCode }, out)); }
         return send(res, 404, { error: 'No seat has that rejoin code. Check it, or join with the four-letter party code.' });
       }
       const entry = rooms.get(code);
@@ -278,6 +301,36 @@ const server = http.createServer(async (req, res) => {
       broadcast(entry);
       save(entry);
       return send(res, 200, Object.assign({ code }, s));
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/restore') {
+      // After a server restart that lost saved parties (free hosting wipes the disk), a returning
+      // player brings back the party from the copy their browser kept. Seats are matched by hash.
+      const body = await readJson(req, 600 * 1024);
+      const code = String(body.code || '').toUpperCase().trim();
+      const room = body.room;
+      if (rooms.has(code)) {
+        const s = seat(rooms.get(code), body.name, body.token);
+        if (s.error) return send(res, 409, { error: s.error });
+        return send(res, 200, Object.assign({ code }, s));
+      }
+      if (!/^[A-Z]{4}$/.test(code) || !room || typeof room !== 'object' || room.v !== 2 || room.code !== code || !room.players || !Array.isArray(room.order) || !room.seatKeys) return send(res, 400, { error: 'That saved party cannot be restored.' });
+      if (rooms.size >= MAX_ROOMS) return send(res, 503, { error: 'The server is full. Try again later.' });
+      const keys = room.seatKeys;
+      delete room.seatKeys;
+      delete room.voiceIssue;
+      const entry = newEntry(room);
+      for (const pid of room.order) if (room.players[pid] && Array.isArray(keys[pid])) entry.seats.set(pid, makeSeat(null, null, String(keys[pid][0] || ''), String(keys[pid][1] || '')));
+      let mine = null;
+      for (const [pid, st] of entry.seats) if (opens(st, body.token)) mine = claim(st, body.token, pid);
+      if (!mine) return send(res, 403, { error: 'Your saved seat does not match this party.' });
+      if (room.dm && room.dm.busy) { room.dm.queue = (room.dm.busy.intents || []).concat(room.dm.queue || []); room.dm.busy = null; }
+      for (const id in room.players) room.players[id].online = false;
+      room.updated = Date.now();
+      rooms.set(code, entry);
+      save(entry);
+      console.log(`[${code}] party restored from a player's saved copy`);
+      return send(res, 200, Object.assign({ code, restored: true }, mine));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/events') {

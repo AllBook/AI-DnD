@@ -216,25 +216,26 @@
 
   function listen(lost) {
     try { N.listen({ code: session.code, token: session.token }, onRoom, lost); }
-    catch (e) { leaveLocal('Could not open the table. Try again.'); }
+    catch (e) { leaveLocal('Could not open the table. Try again.', true); }
   }
 
   async function onLost() {
     const s = session;
     if (!s || leaving) return;
     let again = null;
-    try { again = await N.join(s.code, s.name, s.token); } catch (e) { again = null; }
+    try { again = await joinOrRestore(s.code, s.name, s.token); } catch (e) { again = null; }
     if (session !== s || leaving) return;
     if (again && again.token) {
       s.token = again.token;
       if (again.rejoin) s.rejoin = again.rejoin;
       myId = again.playerId;
       store.set('aidnd.session', s);
-      listen(() => leaveLocal('The connection to that party was lost. Join again to continue.'));
-    } else leaveLocal('That party has ended. Start a new one.');
+      listen(() => leaveLocal('The connection to that party was lost. Press Join to go straight back to your seat.', true));
+    } else leaveLocal((again && again.error) || 'Could not reach your party. Press Join to try again.', true);
   }
 
-  function leaveLocal(msg) {
+  function leaveLocal(msg, keepSeat) {
+    const kept = keepSeat ? session : null;
     leaving = false;
     netCall('stop');
     narrQ.length = 0;
@@ -249,7 +250,8 @@
     $('log').replaceChildren();
     ui.panel = null; ui.kick = null; ui.give = null; ui.unread = false; ui.tab = 'story';
     sel.enemy = null; sel.ally = null;
-    store.set('aidnd.session', null);
+    // Losing the connection must never lose the seat: keep the token so "Join" brings you straight back.
+    if (kept) { store.set('aidnd.session', kept); $('codeInput').value = kept.code; if (kept.name) $('nameInput').value = kept.name; } else store.set('aidnd.session', null);
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
     ['settingsDlg', 'leaveDlg'].forEach(closeDlg);
     calm();
@@ -257,11 +259,42 @@
     joinNote(typeof msg === 'string' ? msg : '');
   }
 
+  // ---------------- party backup ----------------
+  // Free hosting can wipe the server's saved parties when it restarts. Every browser keeps the
+  // latest copy of its party, and the first player back brings the party back from it.
+  let copyTimer = null;
+  function keepCopy(room) {
+    if (!room || !room.seatKeys || N.kind !== 'server') return;
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => store.set('aidnd.room.' + room.code, { at: Date.now(), room }), 800);
+  }
+  function savedCopy(code) {
+    const c = store.get('aidnd.room.' + code);
+    return c && c.room && c.room.code === code && Date.now() - c.at < 30 * 86400000 ? c.room : null;
+  }
+  /** Join, and if the server has forgotten the party, restore it from this browser's copy. */
+  async function joinOrRestore(code, name, token) {
+    let res = await N.join(code, name, token);
+    if (res && res.token) return res;
+    const rejoinOnly = /^[A-Z0-9]{6}$/.test(code);
+    const s = store.get('aidnd.session');
+    const partyCode = rejoinOnly ? (s && s.rejoin === code ? s.code : null) : code;
+    const seatToken = rejoinOnly ? (s && s.token) || code : token || (s && s.code === code ? s.token : null);
+    const copy = partyCode && seatToken && N.restore ? savedCopy(partyCode) : null;
+    if (copy && res && /No party|No seat/.test(res.error || '')) {
+      const back = await N.restore(partyCode, name, seatToken, copy);
+      if (back && back.token) { toast('The server had restarted, so your party was restored from this device.'); return back; }
+      return back;
+    }
+    return res;
+  }
+
   function onRoom(room) {
     if (!session || !room || leaving) return;
     if (!room.players || !room.players[myId]) { leaveLocal('You are no longer in that party.'); return; }
     const old = state;
     state = room;
+    keepCopy(room);
     syncAudio(room);
     detect(old, room);
     render();
@@ -1252,7 +1285,7 @@
     joinNote(create ? 'Setting the table…' : 'Joining…', true);
     setJoinBusy(true);
     try {
-      const res = create ? await N.create(name) : await N.join(code, name, token);
+      const res = create ? await N.create(name) : await joinOrRestore(code, name, token);
       if (res && res.token) enter(res, name, saved);
       else {
         // A stored seat that the table no longer knows must not block joining afresh.
@@ -1287,10 +1320,10 @@
       joinNote('Rejoining your party…', true);
       let res = null;
       let failed = false;
-      try { res = await N.join(saved.code, saved.name, saved.token); } catch (e) { failed = true; }
+      try { res = await joinOrRestore(saved.code, saved.name, saved.token); } catch (e) { failed = true; }
       if (res && res.token) { enter(res, saved.name, saved); return; }
       if (failed) joinNote('Could not reach your party. Check your connection and reload to try again.');
-      else { store.set('aidnd.session', null); joinNote((res && res.error) || ''); $('codeInput').value = hash || ''; }
+      else { joinNote((res && res.error) || ''); $('codeInput').value = (saved.rejoin) || hash || ''; }
     }
   }
 

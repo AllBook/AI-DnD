@@ -46,6 +46,7 @@
       kind: 'server',
       create: (name) => post('/api/create', { name }),
       join: (code, name, token) => post('/api/join', { code, name, token }),
+      restore: (code, name, token, room) => post('/api/restore', { code, name, token, room }),
       listen(session, onState, onLost) {
         creds = session;
         if (es) es.close();
