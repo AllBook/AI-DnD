@@ -81,6 +81,11 @@
   const ENCOUNTERS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['deadly', 'Deadly']];
   const SAFE_LAYOUTS = ['tavern', 'town', 'docks', 'camp'];
   const REP_WORDS = ['hated', 'distrusted', 'disliked', 'unknown', 'liked', 'respected', 'celebrated'];
+  // "Chapter 2: The Drowned Bell" -> { label: 'Chapter 2', title: 'The Drowned Bell' }.
+  const chapterParts = (c) => {
+    const m = /^chapter\s+([\w-]+)\s*[:.\-—–]\s*(.+)$/i.exec(String(c || '').trim());
+    return m ? { label: 'Chapter ' + m[1], title: m[2] } : { label: 'Chapter', title: String(c || '') };
+  };
   const HIT_DIE = { Barbarian: 12, Fighter: 10, Paladin: 10, Ranger: 10, Monk: 8, Rogue: 8, Cleric: 8, Bard: 8, Druid: 8, Warlock: 8, Wizard: 6, Sorcerer: 6 };
 
   // ---------------- characters: races, backgrounds, looks (from the engine, with fallbacks) ----------------
@@ -636,8 +641,9 @@
     const paused = !!(state.dm || {}).paused;
     const on = state.phase !== 'lobby' && (!!st.chapter || !!th || !!mood || paused);
     box.hidden = !on;
+    box.classList.toggle('shop-gap', shopNow());   // room for the Merchant badge in the corner
     paint('arc', box, [on, st.chapter, th, mood, paused], () => !on ? [] : [
-      !!st.chapter && h('span', { class: 'arc-ch' }, h('span', { class: 'lbl' }, 'Chapter'), h('b', null, st.chapter)),
+      !!st.chapter && h('span', { class: 'arc-ch', title: st.chapter }, h('span', { class: 'lbl' }, chapterParts(st.chapter).label), h('b', null, chapterParts(st.chapter).title)),
       !!th && h('button', { type: 'button', class: 'arc-th' + (th.value >= th.max ? ' full' : ''), 'data-k': 'arc-threat', title: `Threat: ${th.name} (${th.value} of ${th.max}). Open the Journal.`,
         onclick: () => { ui.tab = 'journal'; render(); const j = $('jThreat'); if (j && j.scrollIntoView) j.scrollIntoView({ block: 'nearest' }); } },
       threatClock(th, 20), h('span', { class: 'arc-th-nm' }, th.name)),
@@ -1429,7 +1435,7 @@
             btn(dm.paused ? 'Resume the DM' : 'Pause the DM', null, { t: 'pause' }, { cls: dm.paused ? 'primary' : '', k: 'ht-pause', title: dm.paused ? 'Let the Dungeon Master answer again.' : 'Hold the story while the table talks. Messages wait.' }),
             btn('Redo last reply', null, { t: 'regen' }, { k: 'ht-regen', disabled: !state.canRedo || !!dm.busy,
               title: state.canRedo ? 'Take back the AI Dungeon Master’s last reply and ask again.' : 'Available right after an AI Dungeon Master reply, before anything else happens.' }))),
-        h('div', { class: 'ht-sec' },
+        h('div', { class: 'ht-sec ht-mood' },
           h('label', { class: 'lbl', for: 'moodSel' }, 'Scene mood'), moodSel),
         h('div', { class: 'ht-sec ht-enc' },
           h('span', { class: 'lbl', id: 'encLbl' }, 'Start an encounter'),
@@ -1437,7 +1443,7 @@
             h('div', { class: 'modes seg', role: 'radiogroup', 'aria-labelledby': 'encLbl' }, ENCOUNTERS.map(([id, label]) =>
               h('button', { type: 'button', role: 'radio', 'aria-checked': String(lvl === id), 'data-k': 'enc-' + id, class: id === 'deadly' ? 'deadly' : '', disabled: !scene,
                 onclick: () => { ui.enc = id; render(); } }, label))),
-            btn('Start', null, { t: 'encounter', level: lvl }, { cls: lvl === 'deadly' ? 'danger' : 'primary', k: 'enc-go', disabled: !scene })),
+            btn('Start', null, async () => { if (await send({ t: 'encounter', level: lvl })) { ui.panel = null; render(); } }, { cls: lvl === 'deadly' ? 'danger' : 'primary', k: 'enc-go', disabled: !scene })),
           !scene && h('p', { class: 'hint' }, 'Encounters start from a scene, not mid-fight.'))),
       directorBox());
   }
@@ -1449,7 +1455,7 @@
     return h('div', { class: 'lvl-banner', role: 'status' },
       h('span', { class: 'lvl-badge', 'aria-hidden': 'true' }, String(offer.level)),
       h('span', { class: 'lvl-tx' }, h('b', null, 'Level up!'), h('span', null, `Level ${offer.level}: choose an upgrade${p.pending.length > 1 ? ` (${p.pending.length} waiting)` : ''}.`)),
-      btn('Choose', null, () => openPack('lvlCard'), { cls: 'primary', k: 'lvl-go' }));
+      btn('Choose', null, () => { openPack('lvlCard'); const c = $('lvlCard'); if (c) { try { c.focus({ preventScroll: true }); } catch (e) { /* ignore */ } } }, { cls: 'primary', k: 'lvl-go' }));
   }
 
   const isDying = (q) => !!q && !!q.cls && q.alive === false && !q.dead && !!q.dying && !q.dying.stable;
@@ -1686,7 +1692,9 @@
     const hostP = state.players[state.host];
     const lobby = state.phase === 'lobby';
     const seats = state.order.filter((id) => state.players[id]);
-    paint('party', $('party'), [state.players, state.order, state.host, cur, sel.ally, ui.kick, myId, lobby, cfVer()], () => {
+    const comp = state.story && state.story.companion;
+    const allies = state.combat && Array.isArray(state.combat.allies) ? state.combat.allies : [];
+    paint('party', $('party'), [state.players, state.order, state.host, cur, sel.ally, ui.kick, myId, lobby, cfVer(), comp, allies], () => {
       const kids = seats.map((id) => {
         const p = state.players[id];
         const cls = ['pc', cur === id && 'turn', sel.ally === id && 'sel', p.cls && !p.alive && 'down'].filter(Boolean).join(' ');
@@ -1705,16 +1713,30 @@
             id === state.host && h('span', { class: 'tag warn' }, 'Host'),
             p.online === false && h('span', { class: 'tag' }, 'Offline'),
             lobby && h('span', { class: 'tag ' + (p.cls ? 'good' : '') }, p.cls ? 'Ready' : 'Choosing'),
-            !!p.cls && !p.alive && h('span', { class: 'tag bad' }, 'Down'),
+            !!p.cls && p.alive === false && !p.dying && !p.dead && h('span', { class: 'tag bad' }, 'Down'),
             cur === id && h('span', { class: 'tag warn' }, 'Acting'),
             sel.ally === id && h('span', { class: 'tag good' }, 'Targeted'),
-            fxTags(p))),
+            fxTags(p)),
+          savePips(p)),
           host && id !== myId && h('div', { class: 'pc-tools' },
             ui.kick === id
               ? [h('span', null, `Remove ${p.name} from the party?`),
                 btn('Yes, kick', null, async () => { ui.kick = null; await send({ t: 'kick', pid: id }); render(); }, { cls: 'danger', k: 'kick-yes-' + id }),
                 btn('No', null, () => { ui.kick = null; render(); }, { k: 'kick-no-' + id })]
               : btn('Kick', null, () => { ui.kick = id; render(); }, { cls: 'ghost', k: 'kick-' + id })));
+      });
+      // The companion: the friendly NPC who travels and fights with the party.
+      const names = new Set(allies.map((a) => a.name));
+      const cards = allies.map((a) => [a, true]).concat(comp && !names.has(comp.name) ? [[comp, false]] : []);
+      cards.forEach(([a, fighting]) => {
+        kids.push(h('div', { class: 'pc ally' + (a.alive === false ? ' down' : '') },
+          h('div', { class: 'pc-main' },
+            h('div', { class: 'pc-row' },
+              h('span', { class: 'ally-crest', 'aria-hidden': 'true' }, String(a.name || '?').trim().charAt(0).toUpperCase() || '?'),
+              h('div', { class: 'nm' }, h('b', null, a.name), h('span', null, fighting ? 'Companion · fighting beside you' : 'Companion · travels with the party'))),
+            bar('hp ally-hp', a.hp, a.maxHp),
+            h('div', { class: 'nums' }, h('span', null, `HP ${a.hp}/${a.maxHp}`), a.atk != null && h('span', null, `ATK ${a.atk}`)),
+            h('div', { class: 'tags' }, h('span', { class: 'tag good' }, 'Companion'), a.alive === false && h('span', { class: 'tag bad' }, 'Down'), fxTags(a)))));
       });
       if (!host && hostP && hostP.online === false) {
         kids.push(h('div', { class: 'btns' }, btn('Claim host', `${hostP.name} is offline`, { t: 'claimhost' }, { k: 'claimhost' })));
@@ -1850,6 +1872,22 @@
   const SORTS = [['type', 'Type'], ['name', 'Name'], ['value', 'Value']];
   const itemOf = (id) => ITEMS[id] || { name: String(id), type: 'misc', description: '', value: 0, stats: {}, effects: [] };
   const rarityOf = (it) => (RARITY[it.rarity] ? it.rarity : 'common');
+  const isSpecial = (it) => !!it && (it.rarity === 'rare' || it.rarity === 'epic' || it.rarity === 'legendary');
+  const isNamed = (id) => UNIQUES.includes(id);
+  // Names of rare and epic items, to pick them out of loot lines in the story feed.
+  const SPECIAL_IDS = Object.keys(ITEMS).filter((id) => isSpecial(ITEMS[id]) && ITEMS[id].name).sort((a, b) => ITEMS[b].name.length - ITEMS[a].name.length);
+  const SPECIAL_RE = SPECIAL_IDS.length ? new RegExp('(' + SPECIAL_IDS.map((id) => ITEMS[id].name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')') : null;
+  const SPECIAL_BY_NAME = {};
+  SPECIAL_IDS.forEach((id) => { SPECIAL_BY_NAME[ITEMS[id].name] = id; });
+  function lootText(text) {
+    if (!SPECIAL_RE || !SPECIAL_RE.test(text)) return text;
+    return String(text).split(SPECIAL_RE).map((part, i) => {
+      const id = i % 2 ? SPECIAL_BY_NAME[part] : null;
+      if (!id) return part;
+      const it = ITEMS[id];
+      return h('span', { class: 'loot r-' + rarityOf(it), title: `${RARITY[rarityOf(it)]}${it.quirk ? ': ' + it.quirk : ''}` }, h('span', { 'aria-hidden': 'true' }, '✦ '), part);
+    });
+  }
   const typeKey = (it) => (it.slot === 'offhand' ? 'offhand' : it.type);
   const typeName = (it) => TYPE_NAMES[typeKey(it)] || 'Item';
   const inFilter = (it, f) => f === 'all' || (f === 'gear' ? ['weapon', 'armor', 'trinket', 'tool'].includes(it.type) : f === 'valuable' ? it.type === 'treasure' : it.type === f);
@@ -1940,12 +1978,22 @@
       h('div', { class: 'hero-bars' },
         h('div', null, h('div', { class: 'nums' }, h('span', null, 'HP'), h('span', null, `${p.hp}/${p.maxHp}`)), bar('hp', p.hp, p.maxHp)),
         h('div', null, h('div', { class: 'nums' }, h('span', null, 'MP'), h('span', null, `${p.mana}/${p.maxMana}`)), bar('mp', p.mana, p.maxMana))),
+      p.alive === false && h('div', { class: 'hero-down' }, savePips(p),
+        h('p', { class: 'hint' }, p.dead ? 'Dead. A Resurrection spell, or a priest where a merchant is (100 gold, Raise in the actions), brings a hero back.'
+          : p.dying && p.dying.stable ? 'Stable: out of the fight, up again when it is won or when healed.' : 'Dying: a death save each turn. Healing or a friend’s Stabilise helps.')),
+      (p.fx || []).length > 0 && h('ul', { class: 'conds', 'aria-label': 'Conditions' }, (p.fx || []).map((f) => {
+        const i = fxInfo(f);
+        return h('li', null, h('span', { class: 'tag ' + i.cls }, i.label), h('span', null, i.desc));
+      })),
       h('div', { class: 'pills' },
-        pill('ATK', atkOf(p), 'atk'), pill('DEF', defOf(p), 'def'), pill('Gold', p.gold, 'gold'), pill('XP', p.xp),
+        pill('ATK', atkOf(p), 'atk'), pill('DEF', defOf(p), 'def'), pill('Gold', p.gold, 'gold'), pill('XP', `${p.xp}/${(p.level || 1) * 60}`),
+        h('span', { class: 'pill', title: `Hit dice: spend one per short rest to heal d${HIT_DIE[p.cls] || 8} + CON. A long rest refills them.` }, h('small', null, 'Hit dice'), h('b', null, `${Math.max(0, Number(p.hd) || 0)}/${p.level}`)),
         canGive && !ui.give && btn('Give gold…', null, () => { ui.give = { what: 'gold' }; render(); }, { cls: 'ghost mini', k: 'give-open' })),
       canGive && givePanel(p),
       h('div', { class: 'scores' }, ABILITY_NAMES.filter((a) => scores[a] != null).map((a) =>
         h('span', { title: ABILITY_FULL[a] || a }, a, h('b', null, String(scores[a])), h('small', null, mod(scores[a]))))),
+      (p.feats || []).length > 0 && h('div', { class: 'feats' }, h('span', { class: 'lbl' }, 'Feats'),
+        h('ul', null, (p.feats || []).map((f) => h('li', null, h('b', null, (FEATS[f] || { name: f }).name), ' ', h('span', null, (FEATS[f] || {}).desc || ''))))),
       h('div', { class: 'tags' },
         abilitiesOf(p).map((id) => h('span', { class: 'tag good', title: ABILITIES[id].desc || '' }, ABILITIES[id].name)),
         (p.spells || []).filter((id) => SPELLS[id]).map((id) => h('span', { class: 'tag', title: SPELLS[id].description || '' }, SPELLS[id].name))));
@@ -1982,12 +2030,13 @@
     const worn = src === 'pack' && !!slotOf(p, id);
     return h('button', {
       type: 'button', class: `itile r-${rarityOf(it)}${on ? ' sel' : ''}${worn ? ' worn' : ''}`, 'data-k': `${src}-tile-${id}`, title: it.name,
-      'aria-pressed': String(on), 'aria-label': `${it.name}, ${qty}, ${typeName(it).toLowerCase()}${worn ? ', equipped' : ''}`,
+      'aria-pressed': String(on), 'aria-label': `${it.name}, ${qty}, ${isSpecial(it) ? rarityOf(it) + ' ' : ''}${typeName(it).toLowerCase()}${worn ? ', equipped' : ''}`,
       onclick: () => selectItem(id, src),
     },
     itemIcon(id, 30),
     qty > 1 && h('span', { class: 'qty', 'aria-hidden': 'true' }, String(qty)),
     worn && h('span', { class: 'worn-mark', 'aria-hidden': 'true' }, 'E'),
+    isSpecial(it) && h('span', { class: 'spark', 'aria-hidden': 'true' }, '✦'),
     h('span', { class: 'iname', 'aria-hidden': 'true' }, it.name));
   }
 
@@ -2142,10 +2191,11 @@
         h('span', { class: 'd-ic' }, itemIcon(id, 44)),
         h('div', { class: 'd-title' },
           h('b', null, it.name),
-          h('span', null, h('span', { class: 'rar r-' + rar }, RARITY[rar]), ` · ${typeName(it)}`,
+          h('span', null, h('span', { class: 'rar r-' + rar }, RARITY[rar] + (isNamed(id) ? ' · named' : '')), ` · ${typeName(it)}`,
  (src === 'pack' || src === 'sell') && owned > 1 ? ` · ×${owned}` : '', src === 'shop' && owned ? ` · you have ${owned}` : '', src === 'stash' ? ` · ×${stashed} in stash` : '', worn ? ' · equipped' : '')),
         btn('×', null, () => { inv.sel = null; inv.confirm = false; render(); }, { cls: 'ghost close', k: 'd-close', title: 'Close details' })),
       !!it.description && h('p', { class: 'd-desc' }, it.description),
+      !!it.quirk && h('p', { class: 'd-quirk' }, h('span', { class: 'q-ic', 'aria-hidden': 'true' }, '✦'), h('span', null, h('b', null, isNamed(id) ? 'Named item. ' : 'Quirk. '), it.quirk)),
       (statLine(it) || (it.effects || []).length > 0) && h('ul', { class: 'd-stats' },
         STAT_LABEL.filter(([k]) => (it.stats || {})[k]).map(([k, l]) => h('li', null, `+${it.stats[k]} ${l}`)),
         (it.effects || []).map((e) => h('li', { class: 'fx' }, effectText(e)))),
@@ -2185,6 +2235,7 @@
         h('span', { class: 'tn' },
           h('span', null, it.name),
           h('small', null, sub),
+          !!it.quirk && h('small', { class: 'quirk' }, '✦ ' + it.quirk),
           !!nl && src === 'shop' && h('small', { class: 'net ' + nl.cls }, nl.text))),
         right);
     };
@@ -2292,6 +2343,48 @@
       ]);
   }
 
+  // ---------------- level-ups ----------------
+  // player.pending = [{level, options:[{id, name, desc}]}]: pick one with {t:'levelup', choice[, ability]}.
+
+  const optKind = (id) => (id === 'asi' ? 'Ability score' : id.startsWith('spell:') ? 'New spell' : 'Feat');
+  function levelCard(p) {
+    const offer = (p.pending || [])[0];
+    if (!offer) return null;
+    if (!ui.lv || ui.lv.level !== offer.level) ui.lv = { level: offer.level, pick: null, ab: null };
+    const L = ui.lv;
+    const pick = offer.options.find((o) => o.id === L.pick) || null;
+    const scores = p.scores || {};
+    const prime = ((CLASSES[p.cls] || {}).primary || [])[0];
+    const choose = async () => {
+      if (!pick) return;
+      if (pick.id === 'asi' && !L.ab) { toast('Choose which ability to raise.'); return; }
+      const ok = await send(pick.id === 'asi' ? { t: 'levelup', choice: 'asi', ability: L.ab } : { t: 'levelup', choice: pick.id });
+      if (ok) { toast(pick.id === 'asi' ? `${ABILITY_FULL[L.ab] || L.ab} is now ${Math.min(20, (scores[L.ab] || 10) + 2)}.` : (pick.id.startsWith('spell:') ? `You learn ${pick.name.replace(/^Learn /, '')}.` : `New feat: ${pick.name}.`), 'info'); ui.lv = null; render(); }
+    };
+    const confirmLabel = !pick ? 'Pick an upgrade' : pick.id === 'asi' ? (L.ab ? `Raise ${L.ab} to ${Math.min(20, (scores[L.ab] || 10) + 2)}` : 'Pick an ability') : `Take ${pick.name.replace(/^Learn /, '')}`;
+    return h('section', { class: 'lvlup', id: 'lvlCard', 'aria-labelledby': 'lvlHead', tabindex: '-1' },
+      h('div', { class: 'lvl-head' },
+        h('span', { class: 'lvl-badge', 'aria-hidden': 'true' }, String(offer.level)),
+        h('div', null, h('h4', { id: 'lvlHead' }, 'Level up!'),
+          h('p', { class: 'hint' }, `${p.name} reached level ${offer.level}. Choose one upgrade${p.pending.length > 1 ? `, then ${p.pending.length - 1} more` : ''}.`))),
+      h('div', { class: 'lvl-opts', role: 'radiogroup', 'aria-label': 'Upgrades' }, offer.options.map((o) => h('button', {
+        type: 'button', role: 'radio', class: 'lvl-opt k-' + o.id.split(':')[0] + (L.pick === o.id ? ' sel' : ''), 'data-k': 'lvl-' + o.id, 'aria-checked': String(L.pick === o.id),
+        onclick: () => { L.pick = o.id; if (o.id !== 'asi') L.ab = null; render(); },
+      }, h('span', { class: 'lbl' }, optKind(o.id)), h('b', null, o.name), h('span', { class: 'lvl-desc' }, o.desc)))),
+      pick && pick.id === 'asi' && h('div', { class: 'asi', role: 'radiogroup', 'aria-label': 'Ability to raise by 2' }, ABILITY_NAMES.map((k) => {
+        const cur = scores[k] || 10;
+        const next = Math.min(20, cur + 2);
+        const capped = cur >= 20;
+        return h('button', { type: 'button', role: 'radio', class: 'asi-ab' + (L.ab === k ? ' sel' : '') + (k === prime ? ' key' : ''), 'data-k': 'asi-' + k,
+          'aria-checked': String(L.ab === k), disabled: capped, title: capped ? `${ABILITY_FULL[k]} is already 20.` : `${ABILITY_FULL[k]}: ${ABILITY_USE[k] || ''}`,
+          onclick: () => { L.ab = k; render(); } },
+        h('span', { class: 'asi-k' }, k, k === prime && h('small', null, 'key')),
+        h('span', { class: 'asi-v' }, String(cur), h('i', { 'aria-hidden': 'true' }, ' → '), h('b', null, String(next))),
+        h('small', { class: 'asi-m' }, `${mod(cur)} → ${mod(next)}`));
+      })),
+      h('div', { class: 'btns lvl-go' }, btn(confirmLabel, null, choose, { cls: 'primary', k: 'lvl-confirm', disabled: !pick || (pick.id === 'asi' && !L.ab) })));
+  }
+
   function renderSheet() {
     const p = me();
     const inCombat = state.phase === 'combat';
@@ -2301,11 +2394,12 @@
     const people = others().filter((id) => !!state.players[id].cls);
     const roster = people.map((id) => [id, nameOf(id)]);
     if (p && p.cls && inv.src !== 'shop' && inv.src !== 'sell') checkSelection(p, shopOpen);
-    paint('sheet', $('sheet'), [p, state.stash, shopOpen, inCombat, turn, sel.ally, ui.give, roster, state.phase, inv, cfVer()], () => {
+    paint('sheet', $('sheet'), [p, state.stash, shopOpen, inCombat, turn, sel.ally, ui.give, roster, state.phase, inv, cfVer(), ui.lv], () => {
       if (!p || !p.cls) return h('p', { class: 'hint' }, 'Create your character and your sheet appears here.');
       const ctx = { inCombat, turn, shopOpen, people };
       const canGive = !inCombat && people.length > 0;
       return h('div', { class: 'inventory' },
+        levelCard(p),
         heroCard(p, canGive),
         dollPanel(p),
         packPanel(p, ctx),
@@ -2315,24 +2409,84 @@
     });
   }
 
+  const repWord = (v) => REP_WORDS[Math.max(0, Math.min(6, (Number(v) || 0) + 3))];
+  function repMeter(v) {
+    const n = Math.max(-3, Math.min(3, Number(v) || 0));
+    return h('span', { class: 'rep-meter', 'aria-hidden': 'true' }, [-3, -2, -1, 0, 1, 2, 3].map((i) =>
+      h('i', { class: (i === 0 ? 'mid ' : '') + ((n < 0 && i < 0 && i >= n) ? 'neg' : (n > 0 && i > 0 && i <= n) ? 'pos' : '') })));
+  }
+  const achWho = (a) => (a.who === 'party' ? 'The party' : nameOf(a.who));
+
   function renderJournal() {
     const st = state.story || {};
     const quests = Array.isArray(st.quests) ? st.quests : [];
     const npcs = Array.isArray(st.npcs) ? st.npcs : [];
     const facts = Array.isArray(st.facts) ? st.facts : [];
-    paint('journal', $('journal'), [quests, npcs, facts], () => {
-      if (!quests.length && !npcs.length && !facts.length) return h('p', { class: 'hint' }, 'Nothing yet. Quests, the people you meet and what you learn are written down here as the story unfolds.');
+    const chapters = Array.isArray(st.chapters) ? st.chapters : [];
+    const th = st.threat && st.threat.name ? st.threat : null;
+    const rep = st.rep && typeof st.rep === 'object' ? st.rep : {};
+    const comp = st.companion || null;
+    const ach = Array.isArray(state.achievements) ? state.achievements : [];
+    const names = state.order.map((id) => [id, nameOf(id)]);
+    const lobby = state.phase === 'lobby';
+    paint('journal', $('journal'), [quests, npcs, facts, st.chapter, chapters, th, rep, comp && [comp.name, comp.hp, comp.maxHp], ach, names, lobby, ui.achAll, canExport()], () => {
+      const kids = [];
+      if (!lobby && canExport()) {
+        kids.push(h('div', { class: 'jtop' },
+          btn('Download campaign journal', 'an illustrated recap', downloadJournal, { k: 'journal-dl', title: 'A self-contained web page with the party, chapters, quests, moments and achievements.' })));
+      }
+      const start = kids.length;
+      if (st.chapter || chapters.length) {
+        const past = chapters.filter((c) => c !== st.chapter);
+        kids.push(h('div', { class: 'jsec jch' }, h('span', { class: 'lbl' }, st.chapter ? chapterParts(st.chapter).label : 'Chapters'),
+          !!st.chapter && h('p', { class: 'jch-now' }, chapterParts(st.chapter).title),
+          past.length > 0 && h('ol', { class: 'jch-past' }, past.map((c) => h('li', null, c)))));
+      }
+      if (th) {
+        kids.push(h('div', { class: 'jsec jthreat', id: 'jThreat' }, h('span', { class: 'lbl' }, 'Threat'),
+          h('div', { class: 'jthreat-row' }, threatClock(th, 64),
+            h('div', null, h('b', null, th.name),
+              h('p', null, th.value >= th.max ? 'It has come to a head.' : `${th.value} of ${th.max}. It grows while the party dawdles; when the clock fills, it comes to a head.`)))));
+      }
       const rank = { active: 0, done: 1, failed: 2 };
       const qs = quests.slice().sort((a, b) => (rank[a.status] || 0) - (rank[b.status] || 0));
       const moodCls = { friendly: 'good', hostile: 'bad', neutral: '' };
       const qCls = { active: 'warn', done: 'good', failed: 'bad' };
-      return [
-        qs.length > 0 && h('div', { class: 'jsec' }, h('span', { class: 'lbl' }, 'Quests'), h('ul', null, qs.map((q) =>
-          h('li', { class: 'q-' + (q.status || 'active') }, h('b', null, q.title), ' ', h('span', { class: 'tag ' + (qCls[q.status] || '') }, q.status || 'active'), !!q.note && h('p', null, q.note))))),
-        npcs.length > 0 && h('div', { class: 'jsec' }, h('span', { class: 'lbl' }, 'People'), h('ul', null, npcs.map((n) =>
-          h('li', null, h('b', null, n.name), ' ', !!n.mood && h('span', { class: 'tag ' + (moodCls[n.mood] || '') }, n.mood), !!n.note && h('p', null, n.note))))),
-        facts.length > 0 && h('div', { class: 'jsec' }, h('span', { class: 'lbl' }, 'What you know'), h('ul', { class: 'facts' }, facts.map((f) => h('li', null, f)))),
-      ];
+      if (qs.length) kids.push(h('div', { class: 'jsec' }, h('span', { class: 'lbl' }, 'Quests'), h('ul', null, qs.map((q) =>
+        h('li', { class: 'q-' + (q.status || 'active') }, h('b', null, q.title), ' ', h('span', { class: 'tag ' + (qCls[q.status] || '') }, q.status || 'active'), !!q.note && h('p', null, q.note))))));
+      if (comp) {
+        kids.push(h('div', { class: 'jsec' }, h('span', { class: 'lbl' }, 'Companion'),
+          h('div', { class: 'jcomp' }, h('span', { class: 'ally-crest', 'aria-hidden': 'true' }, String(comp.name || '?').charAt(0).toUpperCase()),
+            h('div', null, h('b', null, comp.name), h('p', null, `Travels and fights with the party · HP ${comp.maxHp}`)))));
+      }
+      const places = Object.keys(rep);
+      if (places.length) {
+        kids.push(h('div', { class: 'jsec' }, h('span', { class: 'lbl' }, 'Reputation'), h('ul', { class: 'jrep' }, places.map((pl) => {
+          const v = Number(rep[pl]) || 0;
+          return h('li', null, h('span', { class: 'rep-place' }, pl), repMeter(v), h('span', { class: 'tag ' + (v > 0 ? 'good' : v < 0 ? 'bad' : '') }, repWord(v)));
+        }))));
+      }
+      if (npcs.length) kids.push(h('div', { class: 'jsec' }, h('span', { class: 'lbl' }, 'People'), h('ul', null, npcs.map((n) =>
+        h('li', null, h('b', null, n.name), ' ', !!n.mood && h('span', { class: 'tag ' + (moodCls[n.mood] || '') }, n.mood), !!n.note && h('p', null, n.note))))));
+      if (facts.length) kids.push(h('div', { class: 'jsec' }, h('span', { class: 'lbl' }, 'What you know'), h('ul', { class: 'facts' }, facts.map((f) => h('li', null, f)))));
+      if (kids.length === start) kids.push(h('p', { class: 'hint' }, 'Nothing yet. Quests, the people you meet and what you learn are written down here as the story unfolds.'));
+      if (!lobby) {
+        const total = Object.keys(ACHIEVEMENTS).length;
+        const got = new Set(ach.map((a) => a.id));
+        const locked = Object.keys(ACHIEVEMENTS).filter((id) => !got.has(id));
+        kids.push(h('div', { class: 'jsec jach' },
+          h('div', { class: 'sec-head' }, h('span', { class: 'lbl' }, 'Achievements'), h('span', { class: 'hint' }, `${got.size} of ${total}`)),
+          ach.length ? h('ul', { class: 'ach-list' }, ach.slice().sort((a, b) => (a.at || 0) - (b.at || 0)).map((a) => {
+            const d = ACHIEVEMENTS[a.id] || { name: a.id, desc: '' };
+            return h('li', { class: 'ach' }, h('span', { class: 'trophy', 'aria-hidden': 'true' }),
+              h('span', { class: 'ach-tx' }, h('b', null, d.name), h('small', null, `${achWho(a)} · ${d.desc}`)));
+          })) : h('p', { class: 'hint' }, 'None yet. Win a fight, roll a natural 20, find treasure…'),
+          locked.length > 0 && h('button', { type: 'button', class: 'link', 'data-k': 'ach-all', 'aria-expanded': String(!!ui.achAll), onclick: () => { ui.achAll = !ui.achAll; render(); } },
+            ui.achAll ? 'Hide the ones still to find' : `Show the ${locked.length} still to find`),
+          ui.achAll && h('ul', { class: 'ach-list locked' }, locked.map((id) => h('li', { class: 'ach off' }, h('span', { class: 'trophy', 'aria-hidden': 'true' }),
+            h('span', { class: 'ach-tx' }, h('b', null, ACHIEVEMENTS[id].name), h('small', null, ACHIEVEMENTS[id].desc)))))));
+      }
+      return kids;
     });
   }
 
@@ -2356,7 +2510,10 @@
     }
     if (e.k === 'chat') return h('p', { class: 'chat-line' }, h('b', null, (e.who || 'Someone') + ': '), e.text);
     if (e.k === 'roll') return h('p', { class: 'roll' }, h('span', { class: 'die', 'aria-hidden': 'true' }), h('span', null, e.text));
-    return h('p', { class: e.k === 'foe' ? 'foe-line' : e.k === 'act' ? 'act' : 'sys' }, e.text);
+    if (e.chapter) return h('p', { class: 'sys chapter-line' }, h('span', { class: 'lbl' }, chapterParts(e.chapter).label), h('b', null, chapterParts(e.chapter).title));
+    if (e.award) return h('p', { class: 'sys award-line' }, h('span', { class: 'trophy', 'aria-hidden': 'true' }), h('span', null, e.text));
+    if (e.up) return h('p', { class: 'sys up-line' }, h('span', { class: 'up-ic', 'aria-hidden': 'true' }, '▲'), h('span', null, e.text));
+    return h('p', { class: e.k === 'foe' ? 'foe-line' : e.k === 'act' ? 'act' : 'sys' }, lootText(e.text));
   }
 
   function replay(id, segs) {
@@ -2437,6 +2594,7 @@
     if (ui.give && state.phase === 'combat') ui.give = null;
     renderHeader(); renderTabs(); renderArc(); renderScene(); renderLobby(); renderDm(); renderDock();
     renderComposer(); renderParty(); renderSheet(); renderTrade(); renderJournal(); renderLog();
+    hookTip();
   }
 
   // ---------------- settings and export ----------------
@@ -2525,6 +2683,217 @@
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) { toast('The story could not be exported.'); }
+  }
+
+  // ---------------- campaign journal (an illustrated, self-contained HTML recap) ----------------
+  // Built as a separate DOM document with textContent only, then serialized: inline CSS and inline
+  // SVG portraits from CharacterFigure, no scripts and no external requests.
+
+  const JOURNAL_CSS = `
+:root{--paper:#f3ead6;--paper2:#ebdfc4;--ink:#2a221a;--soft:#6b5d4b;--line:#cdbb98;--brass:#9a7428;--blood:#8f2d24;--moss:#4c7a3f;--mana:#2f5f93;--epic:#6d3f97}
+*{box-sizing:border-box}html{background:#d9cba9}
+body{margin:0 auto;max-width:980px;padding:28px 22px 48px;color:var(--ink);background:var(--paper);font:17px/1.55 Georgia,"Iowan Old Style","Palatino Linotype",Palatino,serif;
+box-shadow:0 0 0 1px var(--line),0 18px 60px rgba(60,40,10,.25);min-height:100vh;background-image:radial-gradient(ellipse at 20% 0,rgba(255,255,255,.55),transparent 60%),radial-gradient(ellipse at 100% 100%,rgba(150,110,40,.12),transparent 55%)}
+h1,h2,h3{font-weight:400;font-variant:small-caps;letter-spacing:.03em;margin:0;line-height:1.15}
+h2{font-size:1.55rem;color:var(--brass);border-bottom:1px solid var(--line);padding-bottom:6px;margin:34px 0 14px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:9px;height:9px;transform:rotate(45deg);background:var(--brass);flex:none}
+p{margin:0}.soft{color:var(--soft)}
+header.cover{text-align:center;padding:18px 0 22px;border-bottom:3px double var(--line)}
+.kicker{font-size:.8rem;letter-spacing:.32em;text-transform:uppercase;color:var(--soft)}
+h1{font-size:clamp(2rem,6vw,3.2rem);margin:8px 0 6px;color:var(--ink)}
+.sub{color:var(--soft)}.now{margin-top:10px;font-style:italic}
+.party{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px}
+.hero{display:grid;grid-template-columns:118px minmax(0,1fr);gap:12px;background:var(--paper2);border:1px solid var(--line);border-radius:10px;padding:12px;break-inside:avoid}
+.portrait{display:flex;align-items:flex-end;justify-content:center;border-radius:8px;border:1px solid var(--line);
+background:radial-gradient(ellipse 60% 10% at 50% 95%,rgba(60,40,10,.35),transparent 100%),radial-gradient(ellipse at 50% 30%,#fff8e6 0,#e4d4b0 75%);overflow:hidden;padding:6px 4px 2px}
+.portrait svg{display:block;max-width:100%;height:auto}
+.hero.fallen .portrait{filter:grayscale(.8)}
+.hero h3{font-size:1.35rem}.hero .line{color:var(--soft);font-size:.92rem}
+.bio{font-style:italic;margin-top:6px;font-size:.95rem}
+.stats{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:8px;font:.78rem ui-monospace,Menlo,Consolas,monospace;color:var(--soft)}
+.stats b{color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.chip{font-size:.72rem;letter-spacing:.04em;border:1px solid var(--line);border-radius:999px;padding:1px 8px;background:var(--paper)}
+.chip.feat{border-color:var(--mana);color:var(--mana)}.chip.ach{border-color:var(--brass);color:var(--brass)}.chip.bad{border-color:var(--blood);color:var(--blood)}
+.crest{width:min(96px,100%);aspect-ratio:1;margin:auto 0;align-self:center;border-radius:50%;display:grid;place-items:center;font-size:2.6rem;color:var(--paper);background:radial-gradient(circle at 35% 30%,#7fa36f,var(--moss))}
+ol.chapters{margin:0;padding-left:0;list-style:none;counter-reset:ch;display:flex;flex-direction:column;gap:6px}
+ol.chapters li{counter-increment:ch;display:flex;gap:12px;align-items:baseline}
+ol.chapters li::before{content:counter(ch,upper-roman);min-width:2.2em;text-align:right;color:var(--brass);font-variant:small-caps}
+ol.chapters li.cur{font-weight:700}
+ul.quests,ul.people,ul.rep{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.st{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:2px;border:1px solid currentColor}
+.st.active{color:var(--brass)}.st.done{color:var(--moss)}.st.failed{color:var(--blood)}
+.note{color:var(--soft);font-size:.93rem}
+.moments{list-style:none;margin:0;padding:0 0 0 26px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:14px}
+.moments li{position:relative;break-inside:avoid}
+.moments li::before{content:"";position:absolute;left:-34px;top:.3em;width:12px;height:12px;border-radius:50%;background:var(--paper);border:2px solid var(--brass)}
+.moments li.dm::before{border-color:var(--ink)}.moments li.award::before{background:var(--brass)}.moments li.death::before,.moments li.fall::before{border-color:var(--blood);background:var(--blood)}
+.moments li.victory::before{border-color:var(--moss);background:var(--moss)}.moments li.level::before{border-color:var(--mana);background:var(--mana)}
+.moments li.chapter{font-variant:small-caps;font-size:1.2rem;color:var(--brass)}
+.moments .tag{display:block;font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--soft)}
+.moments blockquote{margin:2px 0 0;font-style:italic}
+.moments .loot{color:var(--mana);font-weight:700}.moments .loot.epic{color:var(--epic)}
+.achs{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.medal{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--paper2);break-inside:avoid}
+.medal i{flex:none;width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f6dc8f,#b88a2c 70%);box-shadow:inset 0 0 0 3px rgba(255,255,255,.35),0 1px 2px rgba(0,0,0,.3)}
+.medal b{display:block}.medal small{color:var(--soft)}
+.world{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.clock{display:flex;gap:12px;align-items:center}.clock svg{flex:none}
+.meter{display:inline-flex;gap:2px;margin:0 8px;vertical-align:middle}.meter i{width:12px;height:8px;border-radius:2px;background:var(--line)}
+.meter i.pos{background:var(--moss)}.meter i.neg{background:var(--blood)}
+footer{margin-top:40px;text-align:center;color:var(--soft);font-size:.85rem;border-top:3px double var(--line);padding-top:12px}
+@media (max-width:560px){body{padding:18px 14px 36px;font-size:16px}.hero{grid-template-columns:92px minmax(0,1fr)}}
+@media print{html{background:none}body{box-shadow:none;max-width:none}h2{break-after:avoid}}
+`;
+
+  function journalMoments(log) {
+    const out = [];
+    const dms = log.filter((e) => e.k === 'dm');
+    const firstDm = dms[0], lastDm = dms[dms.length - 1];
+    const excerpt = (e) => { const t = segsOf(e).map((sg) => sg.text).join(' ').replace(/\s+/g, ' ').trim(); return t.length > 300 ? t.slice(0, 297).replace(/\s+\S*$/, '') + '…' : t; };
+    log.forEach((e) => {
+      const t = String(e.text || '');
+      let kind = null, tag = '';
+      if (e.k === 'dm') { if (e === firstDm || e === lastDm || e.title) { out.push({ kind: 'dm', tag: e.title || (e === firstDm ? 'The tale begins' : 'Where we left off'), quote: excerpt(e) }); } return; }
+      if (e.chapter) { const c = chapterParts(e.chapter); out.push({ kind: 'chapter', text: `${c.label}: ${c.title}` }); return; }
+      if (e.award) { out.push({ kind: 'award', tag: 'Achievement', text: t.replace(/^Achievement\s*—\s*/, '').replace(/\.\s.*$/, '') }); return; }
+      if (e.up) { out.push({ kind: 'level', tag: 'Level up', text: t.replace(/\s*Choose an upgrade.*$/, '') }); return; }
+      if (/^Victory at/.test(t)) { kind = 'victory'; tag = 'Victory'; }
+      else if (/has died|did not survive/.test(t)) { kind = 'death'; tag = 'A death'; }
+      else if (/ falls!$/.test(t) && e.k === 'foe') { kind = 'fall'; tag = 'Fallen'; }
+      else if (e.k === 'roll' && /Natural 20/.test(t)) { kind = 'crit'; tag = 'A natural 20'; }
+      else if (/joins the party|leaves the party/.test(t)) { kind = 'companion'; tag = 'Companion'; }
+      else if (/A threat looms|threat is over|has come to a head/.test(t)) { kind = 'threat'; tag = 'Threat'; }
+      else if (/back to life|casts Resurrection|staggers back up/.test(t)) { kind = 'raise'; tag = 'Back from the brink'; }
+      else if (/^Battle!/.test(t)) { kind = 'battle'; tag = 'Battle'; }
+      else if (SPECIAL_RE && SPECIAL_RE.test(t) && /loots|recovers|finds|buys|takes/.test(t)) { kind = 'treasure'; tag = 'Treasure'; }
+      else if (/^Reputation in /.test(t)) { kind = 'rep'; tag = 'Reputation'; }
+      if (kind) out.push({ kind, tag, text: t });
+    });
+    return out.slice(-48);   // the most recent moments keep the page readable
+  }
+
+  function journalHtml() {
+    const s = state;
+    const st = s.story || {};
+    const d = document.implementation.createHTMLDocument('Campaign journal');
+    const x = (tag, props, ...kids) => {
+      const el = d.createElement(tag);
+      for (const k in props || {}) { const v = props[k]; if (v == null || v === false) continue; if (k === 'class') el.className = v; else el.setAttribute(k, v === true ? '' : v); }
+      kids.flat(Infinity).forEach((c) => { if (c == null || c === false || c === true || c === '') return; el.append(c.nodeType ? (c.ownerDocument === d ? c : d.importNode(c, true)) : d.createTextNode(String(c))); });
+      return el;
+    };
+    const xs = (tag, attrs, ...kids) => { const el = d.createElementNS(SVGNS, tag); for (const k in attrs) el.setAttribute(k, String(attrs[k])); kids.flat().forEach((c) => c && el.append(c)); return el; };
+    const adv = ADVENTURES.find((a) => a.id === (s.opts || {}).adventure);
+    const custom = (s.opts || {}).adventure === 'custom';
+    const title = custom ? ((s.opts || {}).premise ? 'A Tale of Our Own' : 'An AI-DnD Campaign') : (adv ? adv.title : 'An AI-DnD Campaign');
+    const heroes = s.order.map((id) => s.players[id]).filter((p) => p && p.cls);
+    const ach = Array.isArray(s.achievements) ? s.achievements : [];
+    const date = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    const portrait = (p) => {
+      const f = CF();
+      let el = null;
+      if (f) { try { el = f.svg({ race: raceOf(p), look: p.look, name: p.name, cls: p.cls, eq: p.eq }, { view: 'full', size: 200, pose: p.alive === false ? 'down' : 'idle', facing: 'right', animate: false }); } catch (e) { el = null; } }
+      if (!el) el = silhouette({ view: 'full', size: 200 });
+      el.setAttribute('role', 'img'); el.setAttribute('aria-label', `${p.name}, ${raceOf(p)} ${p.cls}`);
+      return el;
+    };
+    const sec = (name, ...kids) => x('section', null, x('h2', null, name), kids);
+
+    d.documentElement.setAttribute('lang', 'en');
+    d.title = `${title} · campaign journal`;
+    d.head.prepend(x('meta', { charset: 'utf-8' }));
+    d.head.append(x('meta', { name: 'viewport', content: 'width=device-width,initial-scale=1' }), x('style', null, JOURNAL_CSS));
+    const body = d.body;
+    body.append(x('header', { class: 'cover' },
+      x('div', { class: 'kicker' }, 'Campaign journal'),
+      x('h1', null, title),
+      x('p', { class: 'sub' }, `Party ${s.code} · ${heroes.length} ${heroes.length === 1 ? 'hero' : 'heroes'} · written ${date}`),
+      custom && !!(s.opts || {}).premise && x('p', { class: 'now' }, (s.opts || {}).premise),
+      (st.chapter || (s.scene || {}).location) && x('p', { class: 'now' }, [st.chapter ? (/^chapter\b/i.test(st.chapter) ? `Now in ${st.chapter}` : `Now in the chapter “${st.chapter}”`) : '', (s.scene || {}).location ? `last seen at ${(s.scene || {}).location}` : ''].filter(Boolean).join(', ') + '.')));
+
+    const comp = st.companion;
+    body.append(sec('The company', x('div', { class: 'party' },
+      heroes.map((p) => {
+        const mine = ach.filter((a) => a.who === p.id && ACHIEVEMENTS[a.id]);
+        return x('article', { class: 'hero' + (p.dead ? ' fallen' : '') },
+          x('div', { class: 'portrait' }, portrait(p)),
+          x('div', null,
+            x('h3', null, p.name),
+            x('p', { class: 'line' }, `${raceOf(p)} ${p.cls} · level ${p.level}`),
+            x('p', { class: 'line' }, [p.background, p.pronouns].filter(Boolean).join(' · ')),
+            !!p.bio && x('p', { class: 'bio' }, p.bio),
+            !!p.traits && x('p', { class: 'note' }, p.traits),
+            x('div', { class: 'stats' }, x('span', null, 'HP ', x('b', null, String(p.maxHp))), x('span', null, 'ATK ', x('b', null, String(atkOf(p)))), x('span', null, 'DEF ', x('b', null, String(defOf(p)))), x('span', null, 'Gold ', x('b', null, String(p.gold)))),
+            x('div', { class: 'chips' },
+              p.dead && x('span', { class: 'chip bad' }, 'Fallen'),
+              (p.feats || []).map((f) => x('span', { class: 'chip feat', title: (FEATS[f] || {}).desc || '' }, (FEATS[f] || { name: f }).name)),
+              mine.map((a) => x('span', { class: 'chip ach' }, ACHIEVEMENTS[a.id].name)))));
+      }),
+      comp && x('article', { class: 'hero' },
+        x('div', { class: 'portrait' }, x('div', { class: 'crest', 'aria-hidden': 'true' }, String(comp.name || '?').charAt(0).toUpperCase())),
+        x('div', null, x('h3', null, comp.name), x('p', { class: 'line' }, 'Companion'), x('p', { class: 'note' }, 'A friend met on the road, who fights beside the party.'))))));
+
+    const chapters = Array.isArray(st.chapters) ? st.chapters : [];
+    const bare = (c) => chapterParts(c).title;
+    if (chapters.length) body.append(sec('Chapters', x('ol', { class: 'chapters' }, chapters.map((c) => x('li', { class: c === st.chapter ? 'cur' : '' }, bare(c))))));
+    const quests = Array.isArray(st.quests) ? st.quests : [];
+    if (quests.length) body.append(sec('Quests', x('ul', { class: 'quests' }, quests.map((q) => x('li', null, x('b', null, q.title), x('span', { class: 'st ' + (q.status || 'active') }, q.status || 'active'), !!q.note && x('p', { class: 'note' }, q.note))))));
+    const moments = journalMoments(Array.isArray(s.log) ? s.log : []);
+    if (moments.length) {
+      body.append(sec('Notable moments', x('ol', { class: 'moments' }, moments.map((m) => x('li', { class: m.kind },
+        m.kind === 'chapter' ? m.text : [
+          x('span', { class: 'tag' }, m.tag),
+          m.quote ? x('blockquote', null, m.quote) : x('p', null, SPECIAL_RE ? String(m.text).split(SPECIAL_RE).map((part, i) => (i % 2 && SPECIAL_BY_NAME[part] ? x('span', { class: 'loot ' + rarityOf(ITEMS[SPECIAL_BY_NAME[part]]) }, part) : part)) : m.text),
+        ])))));
+    }
+    if (ach.length) {
+      body.append(sec('Achievements', x('div', { class: 'achs' }, ach.filter((a) => ACHIEVEMENTS[a.id]).map((a) => x('div', { class: 'medal' }, x('i', { 'aria-hidden': 'true' }),
+        x('span', null, x('b', null, ACHIEVEMENTS[a.id].name), x('small', null, `${a.who === 'party' ? 'The party' : (s.players[a.who] || { name: 'A hero' }).name} · ${ACHIEVEMENTS[a.id].desc}`)))))));
+    }
+    const th = st.threat && st.threat.name ? st.threat : null;
+    const rep = st.rep && typeof st.rep === 'object' ? st.rep : {};
+    const npcs = Array.isArray(st.npcs) ? st.npcs : [];
+    if (th || Object.keys(rep).length || npcs.length) {
+      const clock = (t) => {
+        const max = Math.max(1, Number(t.max) || 6), val = Math.max(0, Math.min(max, Number(t.value) || 0));
+        const c = 30, r = 26;
+        const pt = (a) => `${(c + r * Math.sin(a)).toFixed(2)} ${(c - r * Math.cos(a)).toFixed(2)}`;
+        const segs = [];
+        for (let i = 0; i < max; i++) { const a0 = (i / max) * Math.PI * 2 + 0.06, a1 = ((i + 1) / max) * Math.PI * 2 - 0.06; segs.push(xs('path', { d: `M${c} ${c} L${pt(a0)} A${r} ${r} 0 0 1 ${pt(a1)} Z`, fill: i < val ? '#8f2d24' : '#e3d5b5', stroke: '#9a7428', 'stroke-width': 0.8 })); }
+        return xs('svg', { viewBox: '0 0 60 60', width: 64, height: 64, role: 'img', 'aria-label': `${val} of ${max}` }, xs('circle', { cx: c, cy: c, r: r + 2.5, fill: 'none', stroke: '#9a7428', 'stroke-width': 1.5 }), segs);
+      };
+      body.append(sec('The world', x('div', { class: 'world' },
+        th && x('div', null, x('h3', null, 'The threat'), x('div', { class: 'clock' }, clock(th), x('div', null, x('b', null, th.name), x('p', { class: 'note' }, `${th.value} of ${th.max} on the clock.`)))),
+        Object.keys(rep).length > 0 && x('div', null, x('h3', null, 'Reputation'), x('ul', { class: 'rep' }, Object.keys(rep).map((pl) => {
+          const v = Math.max(-3, Math.min(3, Number(rep[pl]) || 0));
+          return x('li', null, x('b', null, pl), x('span', { class: 'meter', 'aria-hidden': 'true' }, [-3, -2, -1, 0, 1, 2, 3].map((i) => x('i', { class: (v < 0 && i < 0 && i >= v) ? 'neg' : (v > 0 && i > 0 && i <= v) ? 'pos' : '' }))), x('span', { class: 'note' }, repWord(v)));
+        }))),
+        npcs.length > 0 && x('div', null, x('h3', null, 'People met'), x('ul', { class: 'people' }, npcs.map((n) => x('li', null, x('b', null, n.name), n.mood ? ` (${n.mood})` : '', !!n.note && x('p', { class: 'note' }, n.note))))))));
+    }
+    body.append(x('footer', null, `Kept by the party of ${s.code} · AI-DnD Online`));
+    return '<!doctype html>\n' + d.documentElement.outerHTML;
+  }
+
+  async function downloadJournal() {
+    if (!state) return;
+    let data;
+    try { data = journalHtml(); } catch (e) { toast('The journal could not be written.'); return; }
+    const filename = `ai-dnd-${String(state.code).toLowerCase()}-journal.html`;
+    if (isArtifact()) {
+      const dl = caps().downloads;
+      if (!dl || typeof dl.save !== 'function') { toast('Downloads are not available in this view.'); return; }
+      try { await dl.save({ filename, data }); toast('Campaign journal saved.', 'info'); }
+      catch (e) { toast('The journal could not be saved.'); }
+      return;
+    }
+    try {
+      const url = URL.createObjectURL(new Blob([data], { type: 'text/html;charset=utf-8' }));
+      const a = h('a', { href: url, download: filename, hidden: true });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast('Campaign journal downloaded: open it in any browser.', 'info');
+    } catch (e) { toast('The journal could not be downloaded.'); }
   }
 
   // ---------------- campaign save files ----------------
@@ -2738,11 +3107,60 @@
     if (mq.addEventListener) mq.addEventListener('change', again); else if (mq.addListener) mq.addListener(again);
   } catch (e) { /* optional */ }
 
+  // ---------------- opportunity attacks: a warning in the map's move hover ----------------
+  // table.js asks Engine.pathTo for the hovered square just before it rebuilds its tooltip, so a
+  // pass-through wrapper tells us which square the tooltip describes; a MutationObserver then adds
+  // "Leaving reach: free attack from …" when that move would provoke (not for Rogues and Monks).
+  let tipProbe = null, tipNode = null, tipObs = null, lastPointerY = 0;
+  document.addEventListener('pointermove', (ev) => { lastPointerY = ev.clientY; }, { passive: true, capture: true });
+  try {
+    if (typeof E.pathTo === 'function' && !E.pathTo.reachWrapped) {
+      const orig = E.pathTo;
+      const wrapped = function (room, pid, x, y) { tipProbe = { x: Number(x), y: Number(y) }; return orig.apply(this, arguments); };
+      wrapped.reachWrapped = true;
+      E.pathTo = wrapped;
+    }
+  } catch (e) { /* the warning is optional */ }
+  const gridDist = (a, b) => { try { if (typeof E.dist === 'function') return E.dist(a, b); } catch (e) { /* fall back */ } return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); };
+  function reachWarning(to) {
+    const p = me();
+    const c = state && state.combat;
+    if (!p || !p.pos || !c || !myTurn() || ['Rogue', 'Monk'].includes(p.cls)) return '';
+    const foes = (c.enemies || []).filter((e) => e.alive && e.pos && !(e.fx || []).some((f) => f.k === 'stun') && gridDist(e.pos, p.pos) <= 1 && gridDist(e.pos, to) > 1);
+    if (!foes.length) return '';
+    return `Leaving reach: free attack${foes.length > 1 ? 's' : ''} from ${foes.map((e) => e.name).join(' and ')}`;
+  }
+  function onTip() {
+    const tip = tipNode;
+    const pr = tipProbe;
+    tipProbe = null;
+    if (!tip || !pr || !state || tip.querySelector('.oa-warn')) return;
+    const go = tip.querySelector('.go');
+    if (!go || !/square/.test(go.textContent)) return;
+    const w = reachWarning(pr);
+    if (!w) return;
+    const before = tip.offsetHeight;
+    const above = tip.getBoundingClientRect().bottom <= lastPointerY;
+    tip.append(h('span', { class: 'bad oa-warn' }, w));
+    // A tooltip placed above the square was sized for its old height: lift it by what was added.
+    const m = /translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\)/.exec(tip.style.transform || '');
+    const grow = tip.offsetHeight - before;
+    if (above && m && grow > 0) tip.style.transform = `translate(${m[1]}px, ${Math.max(6, Number(m[2]) - grow)}px)`;
+  }
+  function hookTip() {
+    const t = document.querySelector('#sceneBox .tt-tip');
+    if (!t || t === tipNode || typeof MutationObserver !== 'function') return;
+    tipNode = t;
+    if (tipObs) tipObs.disconnect();
+    try { tipObs = new MutationObserver(onTip); tipObs.observe(t, { childList: true }); } catch (e) { tipObs = null; }
+  }
+
   // Once a second: the DM timer, and time-based buttons (nudge, roll for an absent player, skip).
   setInterval(() => {
     if (!session || !state) return;
     renderDm();
     if (state.phase === 'combat') renderDock();
+    hookTip();
   }, 1000);
 
   boot();
