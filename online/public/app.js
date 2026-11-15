@@ -720,17 +720,6 @@
     return Object.keys(p.inv || {}).filter((id) => p.inv[id] > 0 && ITEMS[id] && ITEMS[id].type === 'consumable');
   }
 
-  function shopPanel(p) {
-    return h('div', { class: 'sub' },
-      h('p', { class: 'hint' }, `You have ${p.gold} gold.`),
-      h('div', { class: 'btns' }, SHOP.filter((id) => ITEMS[id]).map((id) => {
-        const it = ITEMS[id];
-        const st = it.stats || {};
-        const stat = st.attack ? `+${st.attack} ATK · ` : st.defense ? `+${st.defense} DEF · ` : '';
-        return btn(it.name, `${stat}${it.value} gold`, { t: 'buy', item: id }, { disabled: p.gold < it.value, title: it.description, k: 'buy-' + id });
-      })));
-  }
-
   function directorPanel() {
     const go = async () => {
       const text = keepVal('director').trim();
@@ -765,13 +754,12 @@
         const heals = (p.spells || []).filter((id) => SPELLS[id] && SPELLS[id].spell_type === 'Heal');
         kids.push(h('div', { class: 'btns qa' },
           btn('Rest', sc.rested ? 'already rested here' : 'once per location', { t: 'rest' }, { disabled: !!sc.rested }),
-          !!sc.shop && toggleBtn('Shop', `${p.gold} gold`, 'shop'),
+          !!sc.shop && btn('Trade', `merchant · ${p.gold} gold`, () => openPack('tradeBox'), { k: 'trade-open' }),
           heals.map((id) => spellBtn(p, id)),
-          others().some((id) => !!state.players[id].cls) && btn('Give…', 'item or gold', () => { ui.give = ui.give || { what: 'gold' }; ui.tab = 'pack'; render(); const el = $('sheetBox'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }),
+          others().some((id) => !!state.players[id].cls) && btn('Give…', 'item or gold', () => { ui.give = ui.give || { what: 'gold' }; openPack('sheetBox'); }),
           btn('Recap', 'the story so far', { t: 'recap' }),
           btn('Steer away', 'move the story on', { t: 'steer' }),
           isHost() && toggleBtn('Director’s note', 'host only', 'director')));
-        if (ui.panel === 'shop' && sc.shop) kids.push(shopPanel(p));
         if (ui.panel === 'director' && isHost()) kids.push(directorPanel());
       } else if (ph === 'combat' && c) {
         const cur = state.players[c.turn];
@@ -1004,49 +992,471 @@
         btn('Cancel', null, () => { ui.give = null; render(); }, { k: 'give-cancel' })));
   }
 
+  // ---------------- inventory: icons ----------------
+  // Small item pictures drawn as inline SVG (no image files). Shapes by type, colours by material/effect.
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function sv(tag, attrs, ...kids) {
+    const el = document.createElementNS(SVGNS, tag);
+    for (const k in attrs || {}) if (attrs[k] != null) el.setAttribute(k, String(attrs[k]));
+    kids.flat(Infinity).forEach((c) => { if (c) el.append(c); });
+    return el;
+  }
+  const C = { steel: '#c3c9c6', steelDk: '#6f7a78', wood: '#8a5a34', woodDk: '#5a3a20', gold: '#d1a94f', goldDk: '#8d6a22', leather: '#9a6b42', glass: '#d9e4e6', paper: '#e6dcc0', ink: '#12171b' };
+  const POTION = { heal: '#d0453a', mana: '#3f86d6', buff_attack: '#e0902f', buff_defense: '#9aa7a4' };
+
+  function blade(len, w) {
+    // a sword pointing up, then turned 45 degrees
+    const top = 28 - len;
+    return sv('g', { transform: 'rotate(45 16 16)' },
+      sv('path', { d: `M${16 - w / 2} 20 L${16 - w / 2} ${top + 3} L16 ${top} L${16 + w / 2} ${top + 3} L${16 + w / 2} 20 Z`, fill: C.steel, stroke: C.steelDk, 'stroke-width': 0.8 }),
+      sv('rect', { x: 10.5, y: 19.5, width: 11, height: 2.4, rx: 1, fill: C.gold }),
+      sv('rect', { x: 15, y: 21.9, width: 2, height: 4.6, fill: C.wood }),
+      sv('circle', { cx: 16, cy: 27.6, r: 1.7, fill: C.gold }));
+  }
+  function itemIcon(id, size) {
+    const it = ITEMS[id] || { type: 'misc', effects: [] };
+    const k = String(id);
+    let g;
+    if (it.type === 'weapon') {
+      if (/staff/.test(k)) g = sv('g', { transform: 'rotate(45 16 16)' }, sv('rect', { x: 14.8, y: 4, width: 2.4, height: 25, rx: 1.2, fill: C.wood }), sv('circle', { cx: 16, cy: 5, r: 3, fill: C.woodDk }));
+      else if (/mace/.test(k)) g = sv('g', { transform: 'rotate(45 16 16)' }, sv('rect', { x: 14.9, y: 11, width: 2.2, height: 18, fill: C.wood }), sv('circle', { cx: 16, cy: 9, r: 5, fill: C.steel, stroke: C.steelDk, 'stroke-width': 1, 'stroke-dasharray': '2 1.4' }));
+      else if (/dagger/.test(k)) g = blade(13, 3.4);
+      else g = blade(22, 3.6);
+      if (/enchanted/.test(k)) g = sv('g', null, sv('circle', { cx: 16, cy: 16, r: 13, fill: '#4f93d6', opacity: 0.18 }), g);
+    } else if (it.slot === 'offhand') {
+      if (/buckler/.test(k)) g = sv('g', null, sv('circle', { cx: 16, cy: 16, r: 11, fill: C.wood, stroke: C.steel, 'stroke-width': 2 }), sv('circle', { cx: 16, cy: 16, r: 3.4, fill: C.steel }));
+      else if (/tower/.test(k)) g = sv('g', null, sv('path', { d: 'M8 3 H24 V22 Q24 27 16 30 Q8 27 8 22 Z', fill: C.wood, stroke: C.steel, 'stroke-width': 1.8 }), sv('path', { d: 'M16 4 V29 M9 13 H23', stroke: C.steelDk, 'stroke-width': 1.4 }));
+      else g = sv('g', null, sv('path', { d: 'M6 6 Q16 2 26 6 L26 15 Q26 24 16 29 Q6 24 6 15 Z', fill: C.wood, stroke: C.steel, 'stroke-width': 1.8 }), sv('circle', { cx: 16, cy: 14, r: 3.2, fill: C.steel }));
+    } else if (it.type === 'armor') {
+      const fill = /leather/.test(k) ? C.leather : /plate/.test(k) ? '#dfe3e0' : C.steel;
+      g = sv('g', null,
+        sv('path', { d: 'M10 5 L13 4 Q16 7 19 4 L22 5 L27 10 L24 14 L23 13 L23 27 Q16 29 9 27 L9 13 L8 14 L5 10 Z', fill, stroke: C.steelDk, 'stroke-width': 1 }),
+        /chain/.test(k) && sv('path', { d: 'M11 15 H21 M11 19 H21 M11 23 H21', stroke: C.steelDk, 'stroke-width': 1, 'stroke-dasharray': '1.5 1.2' }),
+        /plate/.test(k) && sv('path', { d: 'M16 8 V27 M10 16 Q16 18 22 16', stroke: C.steelDk, 'stroke-width': 1, fill: 'none' }));
+    } else if (it.type === 'trinket') {
+      if (/ring/.test(k)) g = sv('g', null, sv('circle', { cx: 16, cy: 19, r: 7.5, fill: 'none', stroke: C.gold, 'stroke-width': 3 }), sv('path', { d: 'M12.5 11.5 L16 7 L19.5 11.5 L16 14 Z', fill: '#c8493d', stroke: C.goldDk, 'stroke-width': 0.8 }));
+      else if (/amulet/.test(k)) g = sv('g', null, sv('path', { d: 'M8 4 Q16 17 24 4', fill: 'none', stroke: C.steel, 'stroke-width': 1.4, 'stroke-dasharray': '2 1' }), sv('circle', { cx: 16, cy: 20, r: 6.5, fill: C.steel, stroke: C.steelDk }), sv('circle', { cx: 16, cy: 20, r: 3, fill: '#4f93d6' }));
+      else g = sv('g', null, sv('path', { d: 'M16 3 V11', stroke: C.wood, 'stroke-width': 1.4 }), sv('ellipse', { cx: 16, cy: 19, rx: 5.5, ry: 8, fill: '#cdb89a', stroke: '#8c7558' }), sv('circle', { cx: 13, cy: 26, r: 1.6, fill: '#8c7558' }), sv('circle', { cx: 16, cy: 27, r: 1.6, fill: '#8c7558' }), sv('circle', { cx: 19, cy: 26, r: 1.6, fill: '#8c7558' }));
+    } else if (it.type === 'consumable') {
+      const fx = (it.effects || [])[0];
+      const col = (fx && POTION[fx.type]) || '#77b06c';
+      const r = /greater/.test(k) ? 10 : 8.5;
+      g = sv('g', null,
+        sv('rect', { x: 13, y: 5, width: 6, height: 8, fill: C.glass, opacity: 0.85 }),
+        sv('rect', { x: 12.3, y: 2.5, width: 7.4, height: 3.4, rx: 1, fill: C.wood }),
+        sv('circle', { cx: 16, cy: 30 - r - 0.5, r, fill: col, stroke: C.glass, 'stroke-width': 1.4 }),
+        sv('ellipse', { cx: 12.6, cy: 30 - r - 3, rx: 1.8, ry: 2.8, fill: '#fff', opacity: 0.45 }));
+    } else if (it.type === 'tool') {
+      if (/torch/.test(k)) g = sv('g', null, sv('rect', { x: 14.5, y: 14, width: 3, height: 15, rx: 1, fill: C.wood }), sv('path', { d: 'M16 3 Q22 10 18.5 14 H13.5 Q10 10 16 3 Z', fill: '#e0902f' }), sv('path', { d: 'M16 8 Q18.5 11 17 13.5 H15 Q13.5 11 16 8 Z', fill: '#f4d36b' }));
+      else if (/rope/.test(k)) g = sv('g', { fill: 'none', stroke: '#c9a46a', 'stroke-width': 2.2 }, sv('circle', { cx: 16, cy: 16, r: 11 }), sv('circle', { cx: 16, cy: 16, r: 6.5 }), sv('path', { d: 'M27 16 Q29 24 24 28' }));
+      else if (/book/.test(k)) g = sv('g', null, sv('rect', { x: 7, y: 5, width: 18, height: 23, rx: 2, fill: '#6b3d8a', stroke: '#3e2152' }), sv('rect', { x: 9.5, y: 7, width: 13.5, height: 19, fill: C.paper, opacity: 0.25 }), sv('circle', { cx: 16, cy: 16, r: 3.5, fill: 'none', stroke: C.gold, 'stroke-width': 1.4 }));
+      else if (/holy/.test(k)) g = sv('g', null, sv('circle', { cx: 16, cy: 16, r: 6, fill: C.gold }), sv('path', { d: 'M16 3 V8 M16 24 V29 M3 16 H8 M24 16 H29 M7 7 L10.5 10.5 M21.5 21.5 L25 25 M25 7 L21.5 10.5 M10.5 21.5 L7 25', stroke: C.gold, 'stroke-width': 2, 'stroke-linecap': 'round' }));
+      else g = sv('g', { stroke: C.steel, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round' }, sv('circle', { cx: 10, cy: 10, r: 5 }), sv('path', { d: 'M13.5 13.5 L27 27 M22 22 L25 19 M25 25 L28 22' }));
+    } else if (it.type === 'treasure') {
+      if (/coin/.test(k)) {
+        const ancient = /ancient/.test(k);
+        g = sv('g', null, sv('circle', { cx: 16, cy: 16, r: 11, fill: ancient ? '#9a8a5a' : C.gold, stroke: ancient ? '#5e5434' : C.goldDk, 'stroke-width': 1.6 }),
+          ancient ? sv('rect', { x: 13, y: 13, width: 6, height: 6, fill: C.ink }) : sv('circle', { cx: 16, cy: 16, r: 6.5, fill: 'none', stroke: C.goldDk, 'stroke-width': 1.2 }));
+      } else g = sv('g', null, sv('path', { d: 'M7 12 L11.5 6 H20.5 L25 12 L16 27 Z', fill: '#c8493d', stroke: '#7d221a', 'stroke-width': 1 }), sv('path', { d: 'M7 12 H25 M11.5 6 L14 12 L16 27 L18 12 L20.5 6', fill: 'none', stroke: '#f0a49b', 'stroke-width': 0.8 }));
+    } else if (it.type === 'quest') {
+      g = sv('g', null,
+        sv('rect', { x: 8, y: 6.5, width: 16, height: 19, fill: C.paper, stroke: '#8c7558' }),
+        sv('rect', { x: 6, y: 4, width: 20, height: 4, rx: 2, fill: '#b9a57e', stroke: '#8c7558' }),
+        sv('rect', { x: 6, y: 24, width: 20, height: 4, rx: 2, fill: '#b9a57e', stroke: '#8c7558' }),
+        sv('path', { d: 'M11 12 H21 M11 15.5 H21 M11 19 H18', stroke: '#6b5a3e', 'stroke-width': 1.2 }));
+    } else {
+      g = sv('path', { d: 'M10 10 Q16 4 22 10 L25 26 Q16 30 7 26 Z', fill: C.leather, stroke: C.woodDk });
+    }
+    return sv('svg', { viewBox: '0 0 32 32', width: size || 32, height: size || 32, 'aria-hidden': 'true', focusable: 'false', class: 'icon' }, g);
+  }
+  // Empty equipment slot: a faint outline of what belongs there.
+  const SLOT_SAMPLE = { weapon: 'iron_sword', armor: 'leather_armor', offhand: 'shield', trinket: 'ring_of_might' };
+  function figure() {
+    return sv('svg', { viewBox: '0 0 60 120', class: 'figure', 'aria-hidden': 'true', focusable: 'false' },
+      sv('circle', { cx: 30, cy: 14, r: 10 }),
+      sv('path', { d: 'M14 30 Q30 24 46 30 L50 64 L43 64 L41 42 L40 70 L42 114 L33 114 L30 76 L27 114 L18 114 L20 70 L19 42 L17 64 L10 64 Z' }));
+  }
+
+  // ---------------- inventory: data helpers ----------------
+
+  const SLOT_LIST = Array.isArray(E.SLOTS) ? E.SLOTS : ['weapon', 'armor', 'offhand', 'trinket'];
+  const CAP = E.CAPACITY || 20;
+  const SLOT_NAMES = { weapon: 'Weapon', armor: 'Armour', offhand: 'Off-hand', trinket: 'Trinket' };
+  const RARITY = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
+  const STAT_LABEL = [['attack', 'ATK'], ['defense', 'DEF'], ['magic_damage', 'Spell power']];
+  const TYPE_ORDER = ['weapon', 'armor', 'offhand', 'trinket', 'consumable', 'tool', 'treasure', 'quest'];
+  const TYPE_NAMES = { weapon: 'Weapon', armor: 'Armour', offhand: 'Shield', trinket: 'Trinket', consumable: 'Consumable', tool: 'Tool', treasure: 'Treasure', quest: 'Quest item' };
+  const FILTERS = [['all', 'All'], ['gear', 'Gear'], ['consumable', 'Consumables'], ['valuable', 'Valuables'], ['quest', 'Quest']];
+  const SORTS = [['type', 'Type'], ['name', 'Name'], ['value', 'Value']];
+  const itemOf = (id) => ITEMS[id] || { name: String(id), type: 'misc', description: '', value: 0, stats: {}, effects: [] };
+  const rarityOf = (it) => (RARITY[it.rarity] ? it.rarity : 'common');
+  const typeKey = (it) => (it.slot === 'offhand' ? 'offhand' : it.type);
+  const typeName = (it) => TYPE_NAMES[typeKey(it)] || 'Item';
+  const inFilter = (it, f) => f === 'all' || (f === 'gear' ? ['weapon', 'armor', 'trinket', 'tool'].includes(it.type) : f === 'valuable' ? it.type === 'treasure' : it.type === f);
+  const statLine = (it) => STAT_LABEL.filter(([k]) => (it.stats || {})[k]).map(([k, l]) => `+${it.stats[k]} ${l}`).join(' · ');
+  const effectText = (e) => (e.type === 'heal' ? `Restores ${e.value} HP` : e.type === 'mana' ? `Restores ${e.value} mana`
+    : e.type === 'buff_attack' ? `+${e.value} attack for ${e.duration || 3} turns` : e.type === 'buff_defense' ? `+${e.value} defense for ${e.duration || 3} turns` : `${e.type} ${e.value}`);
+  const shortInfo = (it) => statLine(it) || ((it.effects || [])[0] ? effectText(it.effects[0]) : typeName(it));
+  const sellOf = (id) => { try { return E.sellPrice(id); } catch (e) { const it = ITEMS[id]; return it && it.type !== 'quest' ? Math.floor((it.value || 0) / 2) : 0; } };
+  const slotOf = (p, id) => SLOT_LIST.find((s) => (p.eq || {})[s] === id) || null;
+  const packKinds = (p) => Object.keys(p.inv || {}).length;
+  const packFullFor = (p, id) => !(p.inv || {})[id] && packKinds(p) >= CAP;
+  const signed = (d) => (d > 0 ? '+' : d < 0 ? '−' : '±') + Math.abs(d);
+  const qtyLabel = (n, name) => `${n > 1 ? n + '× ' : ''}${name}`;
+
+  const inv = Object.assign({ filter: 'all', sort: 'type', stashOpen: true }, store.get('aidnd.inv') || {}, { sel: null, src: 'pack', qty: 1, confirm: false });
+  const saveInv = () => store.set('aidnd.inv', { filter: inv.filter, sort: inv.sort, stashOpen: inv.stashOpen });
+
+  function selectItem(id, src) {
+    const same = inv.sel === id && inv.src === src;
+    inv.sel = same ? null : id; inv.src = src; inv.qty = 1; inv.confirm = false;
+    render();
+    if (!same) {
+      const d = $('invDetail');
+      if (d && d.scrollIntoView) { try { d.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { d.scrollIntoView(); } }
+    }
+  }
+  async function invSend(action, okMsg) {
+    const ok = await send(action);
+    if (ok) {
+      inv.confirm = false; inv.qty = 1;
+      if (okMsg) toast(okMsg, 'info');
+    }
+    render();
+    return ok;
+  }
+  function openPack(anchor) {
+    ui.tab = 'pack';
+    render();
+    const el = $(anchor) || $('sheetBox');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
+  }
+
+  // Keep the selection valid as the pack, the stash and the merchant change under it.
+  function checkSelection(p, shopOpen) {
+    if (!inv.sel) return;
+    let have = 0;
+    if (inv.src === 'pack') have = (p.inv || {})[inv.sel] || 0;
+    else if (inv.src === 'stash') have = (state.stash || {})[inv.sel] || 0;
+    else if (inv.src === 'shop') have = shopOpen && SHOP.includes(inv.sel) && ITEMS[inv.sel] ? 1 : 0;
+    if (!have) { inv.sel = null; inv.confirm = false; inv.qty = 1; return; }
+    inv.qty = Math.max(1, Math.min(have, inv.qty || 1));
+  }
+
+  // ---------------- inventory: sections ----------------
+
+  function heroCard(p, canGive) {
+    const scores = p.scores || {};
+    const pill = (lbl, v, cls) => h('span', { class: 'pill' + (cls ? ' ' + cls : '') }, h('small', null, lbl), h('b', null, String(v)));
+    return h('div', { class: 'inv-hero' },
+      h('div', { class: 'who' }, h('b', null, p.name), h('span', null, `${p.cls} · Level ${p.level}`)),
+      !!p.bio && h('p', { class: 'bio' }, p.bio),
+      h('div', { class: 'hero-bars' },
+        h('div', null, h('div', { class: 'nums' }, h('span', null, 'HP'), h('span', null, `${p.hp}/${p.maxHp}`)), bar('hp', p.hp, p.maxHp)),
+        h('div', null, h('div', { class: 'nums' }, h('span', null, 'MP'), h('span', null, `${p.mana}/${p.maxMana}`)), bar('mp', p.mana, p.maxMana))),
+      h('div', { class: 'pills' },
+        pill('ATK', atkOf(p), 'atk'), pill('DEF', defOf(p), 'def'), pill('Gold', p.gold, 'gold'), pill('XP', p.xp),
+        canGive && !ui.give && btn('Give gold…', null, () => { ui.give = { what: 'gold' }; render(); }, { cls: 'ghost mini', k: 'give-open' })),
+      canGive && givePanel(p),
+      h('div', { class: 'scores' }, ABILITY_NAMES.filter((a) => scores[a] != null).map((a) =>
+        h('span', { title: ABILITY_FULL[a] || a }, a, h('b', null, String(scores[a])), h('small', null, mod(scores[a]))))),
+      (p.spells || []).length > 0 && h('div', { class: 'tags' }, (p.spells || []).filter((id) => SPELLS[id]).map((id) =>
+        h('span', { class: 'tag', title: SPELLS[id].description || '' }, SPELLS[id].name))));
+  }
+
+  function dollPanel(p) {
+    const eq = p.eq || {};
+    const slotTile = (slot) => {
+      const id = eq[slot] && ITEMS[eq[slot]] ? eq[slot] : null;
+      const it = id ? ITEMS[id] : null;
+      const on = !!id && inv.sel === id && inv.src === 'pack';
+      return h('button', {
+        type: 'button', class: `slot slot-${slot} ${it ? 'r-' + rarityOf(it) : 'empty'}${on ? ' sel' : ''}`, 'data-k': 'slot-' + slot,
+        'aria-pressed': String(on), 'aria-label': it ? `${SLOT_NAMES[slot]}: ${it.name}${statLine(it) ? ', ' + statLine(it) : ''}` : `${SLOT_NAMES[slot]}: empty`,
+        onclick: () => {
+          if (id) { selectItem(id, 'pack'); return; }
+          inv.filter = 'gear'; inv.sel = null; saveInv(); render();
+          toast(`Nothing in your ${SLOT_NAMES[slot].toLowerCase()} slot. Pick gear from your pack and press Equip.`, 'info');
+        },
+      },
+      h('span', { class: 'slot-ic' }, itemIcon(id || SLOT_SAMPLE[slot], 30)),
+      h('span', { class: 'slot-tx' },
+        h('span', { class: 'slot-lbl' }, SLOT_NAMES[slot]),
+        h('span', { class: 'slot-nm' }, it ? it.name : 'Empty'),
+        !!it && !!statLine(it) && h('span', { class: 'slot-st' }, statLine(it))));
+    };
+    return h('div', { class: 'doll', role: 'group', 'aria-label': 'Equipment' },
+      slotTile('weapon'), h('div', { class: 'doll-fig' }, figure()), slotTile('offhand'), slotTile('armor'), slotTile('trinket'));
+  }
+
+  function itemTile(p, id, qty, src) {
+    const it = itemOf(id);
+    const on = inv.sel === id && inv.src === src;
+    const worn = src === 'pack' && !!slotOf(p, id);
+    return h('button', {
+      type: 'button', class: `itile r-${rarityOf(it)}${on ? ' sel' : ''}${worn ? ' worn' : ''}`, 'data-k': `${src}-tile-${id}`, title: it.name,
+      'aria-pressed': String(on), 'aria-label': `${it.name}, ${qty}, ${typeName(it).toLowerCase()}${worn ? ', equipped' : ''}`,
+      onclick: () => selectItem(id, src),
+    },
+    itemIcon(id, 30),
+    qty > 1 && h('span', { class: 'qty', 'aria-hidden': 'true' }, String(qty)),
+    worn && h('span', { class: 'worn-mark', 'aria-hidden': 'true' }, 'E'),
+    h('span', { class: 'iname', 'aria-hidden': 'true' }, it.name));
+  }
+
+  // Arrow keys move between tiles in a grid.
+  function gridKeys(ev) {
+    const tiles = Array.from(ev.currentTarget.querySelectorAll('.itile'));
+    const i = tiles.indexOf(document.activeElement);
+    if (i < 0) return;
+    const cols = Math.max(1, tiles.filter((t) => t.offsetTop === tiles[0].offsetTop).length);
+    const j = { ArrowRight: i + 1, ArrowLeft: i - 1, ArrowDown: i + cols, ArrowUp: i - cols, Home: 0, End: tiles.length - 1 }[ev.key];
+    if (j == null) return;
+    ev.preventDefault();
+    if (tiles[j]) tiles[j].focus();
+  }
+
+  function packPanel(p, ctx) {
+    const ids = Object.keys(p.inv || {}).filter((id) => p.inv[id] > 0);
+    const kinds = packKinds(p);
+    const count = (f) => ids.filter((id) => inFilter(itemOf(id), f)).length;
+    const rank = (id) => { const i = TYPE_ORDER.indexOf(typeKey(itemOf(id))); return i < 0 ? 99 : i; };
+    const byName = (a, b) => itemOf(a).name.localeCompare(itemOf(b).name);
+    const cmp = inv.sort === 'name' ? byName
+      : inv.sort === 'value' ? (a, b) => ((itemOf(b).value || 0) - (itemOf(a).value || 0)) || byName(a, b)
+        : (a, b) => (rank(a) - rank(b)) || byName(a, b);
+    const shown = ids.filter((id) => inFilter(itemOf(id), inv.filter)).sort(cmp);
+    const keep = Array.isArray(p.keep) ? p.keep : [];
+    const full = kinds >= CAP;
+    return h('section', { class: 'inv-sec', 'aria-labelledby': 'packHead' },
+      h('div', { class: 'sec-head' },
+        h('h4', { id: 'packHead' }, 'Pack'),
+        h('div', { class: 'cap' + (full ? ' full' : kinds >= CAP - 2 ? ' near' : ''), title: `Your pack holds ${CAP} kinds of item. Stacks of the same item count once.` },
+          h('span', { class: 'cap-num' }, `${kinds} / ${CAP}`),
+          h('span', { class: 'cap-bar', role: 'meter', 'aria-valuemin': 0, 'aria-valuemax': CAP, 'aria-valuenow': kinds, 'aria-label': `Pack space: ${kinds} of ${CAP} kinds of item` }, h('i', { style: { width: pct(kinds, CAP) } })))),
+      h('div', { class: 'inv-tools' },
+        h('div', { class: 'fchips', role: 'group', 'aria-label': 'Show' }, FILTERS.map(([f, label]) => {
+          const n = f === 'all' ? ids.length : count(f);
+          return h('button', { type: 'button', class: 'fchip', 'data-k': 'filter-' + f, 'aria-pressed': String(inv.filter === f),
+            onclick: () => { inv.filter = f; saveInv(); render(); } }, label, h('span', { class: 'n' }, String(n)));
+        })),
+        h('label', { class: 'sortby' }, h('span', null, 'Sort'),
+          h('select', { 'data-k': 'inv-sort', onchange: (ev) => { inv.sort = ev.target.value; saveInv(); render(); } },
+            SORTS.map(([v, label]) => h('option', { value: v, selected: inv.sort === v }, label))))),
+      shown.length
+        ? h('div', { class: 'igrid', role: 'group', 'aria-label': 'Items in your pack', onkeydown: gridKeys }, shown.map((id) => itemTile(p, id, p.inv[id], 'pack')))
+        : h('p', { class: 'hint empty-note' }, ids.length ? 'Nothing of that kind in your pack.' : 'Your pack is empty.'),
+      full && h('p', { class: 'hint warn' }, 'Your pack is full. New loot goes to the party stash; sell, stash or drop something to make room.'),
+      inv.sel && inv.src === 'pack' && detailPanel(p, ctx),
+      keep.length > 0 && h('div', { class: 'keep' }, h('span', { class: 'lbl' }, 'Keepsakes'),
+        h('ul', null, keep.map((k) => h('li', null, k)))));
+  }
+
+  function compareBlock(p, id) {
+    const it = itemOf(id);
+    const slot = it.slot;
+    if (!it.equippable || !SLOT_LIST.includes(slot)) return null;
+    const curId = (p.eq || {})[slot];
+    if (curId === id) return h('p', { class: 'cmp-note' }, `Worn in your ${SLOT_NAMES[slot].toLowerCase()} slot.`);
+    const cur = curId && ITEMS[curId] ? ITEMS[curId] : null;
+    const totals = { attack: atkOf(p), defense: defOf(p) };
+    const rows = STAT_LABEL.filter(([k]) => (it.stats || {})[k] || (cur && (cur.stats || {})[k])).map(([k, l]) => {
+      const a = (cur && cur.stats && cur.stats[k]) || 0;
+      const b = (it.stats || {})[k] || 0;
+      const d = b - a;
+      return h('li', { class: d > 0 ? 'up' : d < 0 ? 'down' : 'same' },
+        h('span', null, `${l} +${a} → +${b}`),
+        h('b', null, d === 0 ? 'no change' : `net ${signed(d)}`),
+        totals[k] != null && d !== 0 && h('small', null, `${l} ${totals[k]} → ${totals[k] + d}`));
+    });
+    return h('div', { class: 'cmp' },
+      h('span', { class: 'lbl' }, cur ? `Compared with your ${cur.name}` : `Your ${SLOT_NAMES[slot].toLowerCase()} slot is empty`),
+      rows.length ? h('ul', null, rows) : h('p', { class: 'hint' }, 'No stat difference.'));
+  }
+
+  function stepper(max) {
+    if (max <= 1) return null;
+    const set = (n) => { inv.qty = Math.max(1, Math.min(max, n)); inv.confirm = false; render(); };
+    return h('div', { class: 'stepper', role: 'group', 'aria-label': 'Quantity' },
+      h('span', { class: 'lbl' }, 'Qty'),
+      btn('−', null, () => set(inv.qty - 1), { k: 'qty-dec', disabled: inv.qty <= 1, title: 'One fewer' }),
+      h('output', { 'aria-live': 'polite', 'aria-label': `Quantity ${inv.qty} of ${max}` }, `${inv.qty}`),
+      btn('+', null, () => set(inv.qty + 1), { k: 'qty-inc', disabled: inv.qty >= max, title: 'One more' }),
+      btn('All', null, () => set(max), { k: 'qty-all', disabled: inv.qty >= max, cls: 'ghost' }),
+      h('small', null, `of ${max}`));
+  }
+
+  function detailPanel(p, ctx) {
+    const id = inv.sel;
+    const it = itemOf(id);
+    const src = inv.src;
+    const rar = rarityOf(it);
+    const owned = (p.inv || {})[id] || 0;
+    const stashed = (state.stash || {})[id] || 0;
+    const worn = slotOf(p, id);
+    const price = sellOf(id);
+    const quest = it.type === 'quest';
+    const qty = inv.qty;
+    const { inCombat, turn, shopOpen, people } = ctx;
+    const canGear = !inCombat || turn;
+    const notes = [];
+    const acts = [];
+
+    if (src === 'pack') {
+      if (it.equippable && SLOT_LIST.includes(it.slot)) {
+        if (worn) acts.push(btn('Unequip', SLOT_NAMES[worn], () => invSend({ t: 'unequip', slot: worn }), { k: 'd-unequip', disabled: !canGear }));
+        else acts.push(btn('Equip', SLOT_NAMES[it.slot], () => invSend({ t: 'equip', item: id }), { cls: 'primary', k: 'd-equip', disabled: !canGear }));
+      }
+      if (it.type === 'consumable') {
+        const tgt = state.players[sel.ally] && state.players[sel.ally].cls ? sel.ally : myId;
+        acts.push(btn(tgt === myId ? 'Use on yourself' : `Use on ${nameOf(tgt)}`, null, () => invSend({ t: 'use', item: id, target: tgt }), { cls: worn ? '' : 'primary', k: 'd-use', disabled: !canGear }));
+        if (people.length) notes.push(tgt === myId ? 'To use it on an ally, target them on the Party tab.' : `Targeting ${nameOf(tgt)}. Change the target on the Party tab.`);
+      }
+      if (shopOpen && !quest && price > 0) acts.push(btn(`Sell${qty > 1 ? ' ' + qty : ''}`, `${price * qty} gold`, () => invSend({ t: 'sell', item: id, qty }, `Sold ${qtyLabel(qty, it.name)} for ${price * qty} gold.`), { k: 'd-sell', disabled: inCombat }));
+      acts.push(btn(`Stash${qty > 1 ? ' ' + qty : ''}`, 'party stash', () => invSend({ t: 'stash', item: id, qty }, `${qtyLabel(qty, it.name)} put in the party stash.`), { k: 'd-stash', disabled: inCombat }));
+      if (!quest) acts.push(btn('Drop…', null, () => { inv.confirm = true; render(); const y = document.querySelector('[data-k="d-drop-yes"]'); if (y) y.focus(); }, { cls: 'ghost warnbtn', k: 'd-drop', disabled: inCombat || inv.confirm }));
+      if (inCombat) notes.push(turn ? 'Mid-fight you can change gear and use items. Trading, stashing and dropping wait until the fight is over.' : 'Wait for your turn to change gear or use items.');
+      if (quest) notes.push('Quest items cannot be dropped or sold. You can keep them in the party stash.');
+      if (worn && owned === 1 && !inCombat) notes.push('Selling, stashing, giving or dropping it takes it off.');
+    } else if (src === 'shop') {
+      const full = packFullFor(p, id);
+      const poor = p.gold < (it.value || 0);
+      acts.push(btn('Buy', `${it.value} gold`, () => invSend({ t: 'buy', item: id }, `Bought ${it.name} for ${it.value} gold.`), { cls: 'primary', k: 'd-buy', disabled: poor || full || inCombat }));
+      if (poor) notes.push(`You need ${it.value - p.gold} more gold.`);
+      if (full) notes.push(`Your pack is full (${CAP} kinds of item).`);
+      if (owned) notes.push(`You carry ${owned}.`);
+    } else if (src === 'stash') {
+      const full = packFullFor(p, id);
+      acts.push(btn(`Take${qty > 1 ? ' ' + qty : ''}`, 'into your pack', () => invSend({ t: 'unstash', item: id, qty }, `Took ${qtyLabel(qty, it.name)} from the stash.`), { cls: 'primary', k: 'd-take', disabled: inCombat || full }));
+      if (full) notes.push(`Your pack is full (${CAP} kinds of item).`);
+      if (inCombat) notes.push('The stash opens again when the fight is over.');
+    }
+
+    const giveTo = people.includes(sel.ally) ? sel.ally : people[0];
+    const giveRow = src === 'pack' && people.length > 0 && h('div', { class: 'give-row' },
+      h('label', null, h('span', { class: 'lbl' }, 'Give one to'),
+        h('select', { 'data-keep': 'invGiveTo', 'aria-label': 'Who receives it', disabled: inCombat },
+          people.map((pid) => h('option', { value: pid, selected: pid === giveTo }, nameOf(pid))))),
+      btn('Give', null, () => {
+        const to = keepVal('invGiveTo') || giveTo;
+        invSend({ t: 'give', to, item: id }, `Gave ${it.name} to ${nameOf(to)}.`);
+      }, { k: 'd-give', disabled: inCombat }));
+
+    const confirm = src === 'pack' && inv.confirm && h('div', { class: 'confirm', role: 'group', 'aria-label': 'Confirm drop' },
+      h('p', null, `Drop ${qtyLabel(qty, it.name)}? It is gone for good.`),
+      h('div', { class: 'btns' },
+        btn(`Drop ${qty > 1 ? qty : 'it'}`, null, () => invSend({ t: 'drop', item: id, qty }, `Dropped ${qtyLabel(qty, it.name)}.`), { cls: 'danger', k: 'd-drop-yes' }),
+        btn('Keep it', null, () => { inv.confirm = false; render(); }, { k: 'd-drop-no' })));
+
+    const max = src === 'pack' ? owned : src === 'stash' ? stashed : 1;
+    return h('div', { class: `detail r-${rar}`, id: 'invDetail', role: 'region', 'aria-label': `${it.name} details` },
+      h('div', { class: 'd-head' },
+        h('span', { class: 'd-ic' }, itemIcon(id, 44)),
+        h('div', { class: 'd-title' },
+          h('b', null, it.name),
+          h('span', null, h('span', { class: 'rar r-' + rar }, RARITY[rar]), ` · ${typeName(it)}`,
+            src === 'pack' && owned > 1 ? ` · ×${owned}` : '', src === 'stash' ? ` · ×${stashed} in stash` : '', worn ? ' · equipped' : '')),
+        btn('×', null, () => { inv.sel = null; inv.confirm = false; render(); }, { cls: 'ghost close', k: 'd-close', title: 'Close details' })),
+      !!it.description && h('p', { class: 'd-desc' }, it.description),
+      (statLine(it) || (it.effects || []).length > 0) && h('ul', { class: 'd-stats' },
+        STAT_LABEL.filter(([k]) => (it.stats || {})[k]).map(([k, l]) => h('li', null, `+${it.stats[k]} ${l}`)),
+        (it.effects || []).map((e) => h('li', { class: 'fx' }, effectText(e)))),
+      h('p', { class: 'd-value' }, `Value ${it.value || 0} gold`, ' · ', quest ? 'cannot be sold' : price > 0 ? `sells for ${price} each` : 'worthless to a merchant'),
+      compareBlock(p, id),
+      src !== 'shop' && stepper(max),
+      h('div', { class: 'btns d-acts' }, acts),
+      giveRow,
+      confirm,
+      notes.map((n) => h('p', { class: 'hint' }, n)));
+  }
+
+  function tradePanel(p, ctx) {
+    const sellable = Object.keys(p.inv || {}).filter((id) => p.inv[id] > 0 && sellOf(id) > 0 && itemOf(id).type !== 'quest')
+      .sort((a, b) => sellOf(b) - sellOf(a));
+    const row = (id, src, right) => {
+      const it = itemOf(id);
+      const on = inv.sel === id && inv.src === src;
+      return h('li', { class: `trow r-${rarityOf(it)}${on ? ' sel' : ''}` },
+        h('button', { type: 'button', class: 'trow-main', 'data-k': `${src}-row-${id}`, 'aria-pressed': String(on),
+          'aria-label': `${it.name}, ${typeName(it).toLowerCase()}${src === 'sellrow' && p.inv[id] > 1 ? ', ' + p.inv[id] + ' carried' : ''}. Show details`,
+          onclick: () => selectItem(id, src === 'sellrow' ? 'pack' : 'shop') },
+        itemIcon(id, 24),
+        h('span', { class: 'tn' }, h('span', null, it.name + (src === 'sellrow' && p.inv[id] > 1 ? ` ×${p.inv[id]}` : '')),
+          h('small', null, src === 'sellrow' && slotOf(p, id) ? 'equipped' : shortInfo(it)))),
+        right);
+    };
+    return h('section', { class: 'inv-sec trade', id: 'tradeBox', 'aria-labelledby': 'tradeHead' },
+      h('div', { class: 'sec-head' }, h('h4', { id: 'tradeHead' }, 'Trade'), h('span', { class: 'hint' }, `A merchant is here · you have ${p.gold} gold`)),
+      h('div', { class: 'trade-cols' },
+        h('div', { class: 'tcol' }, h('span', { class: 'lbl' }, 'Buy'),
+          h('ul', { class: 'tlist' }, SHOP.filter((id) => ITEMS[id]).map((id) => {
+            const it = ITEMS[id];
+            const poor = p.gold < it.value;
+            const full = packFullFor(p, id);
+            return row(id, 'shop', h('button', { type: 'button', class: 'tprice buy', 'data-k': 'buy-' + id, disabled: poor || full,
+              title: poor ? `You need ${it.value - p.gold} more gold` : full ? 'Your pack is full' : `Buy ${it.name}`,
+              'aria-label': `Buy ${it.name} for ${it.value} gold`, onclick: () => invSend({ t: 'buy', item: id }, `Bought ${it.name} for ${it.value} gold.`) }, `${it.value} g`));
+          }))),
+        h('div', { class: 'tcol' }, h('span', { class: 'lbl' }, 'Sell'),
+          sellable.length
+            ? h('ul', { class: 'tlist' }, sellable.map((id) => row(id, 'sellrow', h('button', { type: 'button', class: 'tprice sell', 'data-k': 'sell-' + id,
+              'aria-label': `Sell one ${itemOf(id).name} for ${sellOf(id)} gold`, onclick: () => invSend({ t: 'sell', item: id, qty: 1 }, `Sold ${itemOf(id).name} for ${sellOf(id)} gold.`) }, `${sellOf(id)} g`))))
+            : h('p', { class: 'hint' }, 'Nothing the merchant wants.'),
+          h('p', { class: 'hint' }, 'Merchants pay half the value. Select an item to sell several at once.'))),
+      inv.sel && inv.src === 'shop' && detailPanel(p, ctx));
+  }
+
+  function stashPanel(p, ctx) {
+    const st = state.stash || {};
+    const ids = Object.keys(st).filter((id) => st[id] > 0).sort((a, b) => itemOf(a).name.localeCompare(itemOf(b).name));
+    const open = !!inv.stashOpen;
+    return h('section', { class: 'inv-sec stash', 'aria-labelledby': 'stashHead' },
+      h('div', { class: 'sec-head' },
+        h('h4', { id: 'stashHead' },
+          h('button', { type: 'button', class: 'sec-toggle', 'data-k': 'stash-toggle', 'aria-expanded': String(open),
+            onclick: () => { inv.stashOpen = !open; saveInv(); render(); } }, h('span', { class: 'chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'), 'Party stash')),
+        h('span', { class: 'hint' }, ids.length ? `${ids.length} kind${ids.length === 1 ? '' : 's'} of item` : 'empty')),
+      open && [
+        ids.length
+          ? h('ul', { class: 'tlist slist' }, ids.map((id) => {
+            const it = itemOf(id);
+            const full = packFullFor(p, id);
+            const on = inv.sel === id && inv.src === 'stash';
+            return h('li', { class: `trow r-${rarityOf(it)}${on ? ' sel' : ''}` },
+              h('button', { type: 'button', class: 'trow-main', 'data-k': 'stash-row-' + id, 'aria-pressed': String(on), 'aria-label': `${it.name}, ${st[id]}, ${typeName(it).toLowerCase()}. Show details`, onclick: () => selectItem(id, 'stash') },
+                itemIcon(id, 24), h('span', { class: 'tn' }, h('span', null, `${it.name}${st[id] > 1 ? ' ×' + st[id] : ''}`), h('small', null, shortInfo(it)))),
+              h('span', { class: 'trow-btns' },
+                h('button', { type: 'button', class: 'tprice', 'data-k': 'take-' + id, disabled: ctx.inCombat || full, title: full ? 'Your pack is full' : '', 'aria-label': `Take one ${it.name}`,
+                  onclick: () => invSend({ t: 'unstash', item: id, qty: 1 }, `Took ${it.name} from the stash.`) }, 'Take'),
+                st[id] > 1 && h('button', { type: 'button', class: 'tprice ghost', 'data-k': 'takeall-' + id, disabled: ctx.inCombat || full, 'aria-label': `Take all ${st[id]} ${it.name}`,
+                  onclick: () => invSend({ t: 'unstash', item: id, qty: st[id] }, `Took ${st[id]}× ${it.name} from the stash.`) }, 'All')));
+          }))
+          : null,
+        h('p', { class: 'hint' }, 'Shared by the whole party. Select an item in your pack and press Stash to leave it here; loot that does not fit in a full pack lands here too.'),
+        inv.sel && inv.src === 'stash' && detailPanel(p, ctx),
+      ]);
+  }
+
   function renderSheet() {
     const p = me();
     const inCombat = state.phase === 'combat';
     const turn = myTurn();
-    const roster = others().filter((id) => !!state.players[id].cls).map((id) => [id, nameOf(id)]);
-    paint('sheet', $('sheet'), [p, inCombat, turn, sel.ally, ui.give, roster, state.phase], () => {
+    const sc = state.scene || {};
+    const shopOpen = state.phase === 'scene' && !!sc.shop;
+    const people = others().filter((id) => !!state.players[id].cls);
+    const roster = people.map((id) => [id, nameOf(id)]);
+    if (p && p.cls) checkSelection(p, shopOpen);
+    paint('sheet', $('sheet'), [p, state.stash, shopOpen, inCombat, turn, sel.ally, ui.give, roster, state.phase, inv], () => {
       if (!p || !p.cls) return h('p', { class: 'hint' }, 'Choose a class and your sheet appears here.');
-      const canUse = !inCombat || turn;
-      const canGive = !inCombat && roster.length > 0;
-      const ally = state.players[sel.ally] ? sel.ally : myId;
-      const eq = p.eq || {};
-      const items = Object.keys(p.inv || {}).filter((id) => p.inv[id] > 0).map((id) => {
-        const it = ITEMS[id] || { name: id, type: 'misc', stats: {} };
-        const equipped = eq.weapon === id || eq.armor === id;
-        const st = it.stats || {};
-        const stat = st.attack ? ` +${st.attack} ATK` : st.defense ? ` +${st.defense} DEF` : '';
-        return h('li', { title: it.description || '' },
-          h('span', null, `${it.name}${p.inv[id] > 1 ? ' ×' + p.inv[id] : ''}`, h('small', null, stat + (equipped ? ' · equipped' : ''))),
-          h('span', { class: 'inv-btns' },
-            it.type === 'consumable' && h('button', { type: 'button', disabled: !canUse, 'data-k': 'use-' + id, title: ally === myId ? 'Use on yourself' : `Use on ${nameOf(ally)}`, onclick: () => send({ t: 'use', item: id, target: ally }) }, 'Use'),
-            it.type !== 'consumable' && !!it.equippable && !equipped && h('button', { type: 'button', 'data-k': 'equip-' + id, onclick: () => send({ t: 'equip', item: id }) }, 'Equip'),
-            canGive && !equipped && h('button', { type: 'button', class: 'ghost', 'data-k': 'give-' + id, onclick: () => { ui.give = { what: id }; render(); } }, 'Give')));
-      });
-      const scores = p.scores || {};
-      const keep = Array.isArray(p.keep) ? p.keep : [];
-      return [
-        h('div', { class: 'who' }, h('b', null, p.name), h('span', null, `${p.cls} · Level ${p.level}`)),
-        !!p.bio && h('p', { class: 'bio' }, p.bio),
-        bar('hp', p.hp, p.maxHp),
-        bar('mp', p.mana, p.maxMana),
-        h('div', { class: 'stats' },
-          h('span', null, 'HP ', h('b', null, `${p.hp}/${p.maxHp}`)), h('span', null, 'MP ', h('b', null, `${p.mana}/${p.maxMana}`)),
-          h('span', null, 'ATK ', h('b', null, String(atkOf(p)))), h('span', null, 'DEF ', h('b', null, String(defOf(p)))),
-          h('span', null, 'Gold ', h('b', null, String(p.gold))), h('span', null, 'XP ', h('b', null, String(p.xp)))),
-        h('div', { class: 'scores' }, ABILITY_NAMES.filter((a) => scores[a] != null).map((a) =>
-          h('span', { title: ABILITY_FULL[a] || a }, a, h('b', null, String(scores[a])), h('small', null, mod(scores[a]))))),
-        (p.spells || []).length > 0 && h('div', { class: 'tags' }, (p.spells || []).filter((id) => SPELLS[id]).map((id) =>
-          h('span', { class: 'tag', title: SPELLS[id].description || '' }, SPELLS[id].name))),
-        h('ul', { class: 'inv' }, items.length ? items : h('li', null, h('small', null, 'Your pack is empty.'))),
-        keep.length > 0 && h('div', { class: 'keep' }, h('span', { class: 'lbl' }, 'Keepsakes'), h('ul', null, keep.map((k) => h('li', null, k)))),
-        canGive && !ui.give && h('div', { class: 'row' }, btn('Give gold or an item…', null, () => { ui.give = { what: 'gold' }; render(); }, { k: 'give-open' })),
-        canGive && givePanel(p),
-      ];
+      const ctx = { inCombat, turn, shopOpen, people };
+      const canGive = !inCombat && people.length > 0;
+      return h('div', { class: 'inventory' },
+        heroCard(p, canGive),
+        dollPanel(p),
+        packPanel(p, ctx),
+        shopOpen && tradePanel(p, ctx),
+        stashPanel(p, ctx));
     });
   }
 
