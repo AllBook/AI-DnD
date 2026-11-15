@@ -625,3 +625,14 @@ dialog.trade-dlg { width: min(820px, calc(100vw - 16px)); max-height: min(92vh, 
 .trade-banner > span { color: var(--brass); font-family: var(--font-display); font-size: 1.05rem; }
 .trade-banner button small { display: block; font-size: .72rem; font-weight: 400; opacity: .75; }
 body.busy .trade-dlg button { opacity: .6; pointer-events: none; }
+@media (min-width: 621px) {
+  /* side by side: each list scrolls on its own so Sell stays in view next to a long Buy list */
+  .trade-dlg .tlist { max-height: min(46vh, 430px); overflow-y: auto; padding-right: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+}
+@media (min-width: 861px) {
+  /* outside the Story tab the composer stays, but slimmer, so the Pack has room */
+  .game:not([data-tab="story"]) #composer .chips, .game:not([data-tab="story"]) #tradeCta { display: none; }
+}
+@media (max-width: 860px) {
+  .trade-cta { padding: 6px 10px; }
+}
