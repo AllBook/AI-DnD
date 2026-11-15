@@ -24,6 +24,7 @@
   </header>
 
   <section class="join" id="joinView">
+   <div class="join-main">
     <h1>Gather your party</h1>
     <p class="lede">A co-op adventure for up to five friends, run by an AI Dungeon Master. Say what your character does in plain words; the DM answers, voices the people you meet and calls for the dice. One of you creates a party, the rest join with its code.</p>
     <div class="join-form" id="joinForm">
@@ -41,6 +42,15 @@
     </div>
     <p class="lede small" id="modeHint" hidden></p>
     <p class="howto"><button class="link" id="howBtn" type="button">How to play</button></p>
+   </div>
+    <section class="tables" id="tablesBox" aria-labelledby="tablesTitle" hidden>
+      <div class="tables-head">
+        <h2 id="tablesTitle">Open tables</h2>
+        <button class="ghost mini" id="tablesRefresh" type="button">Refresh</button>
+        <p class="hint" id="tablesCount" role="status" aria-live="polite"></p>
+      </div>
+      <div class="tables-list" id="tablesList"></div>
+    </section>
   </section>
 
   <main class="game" id="gameView" data-tab="story" hidden>
@@ -131,6 +141,11 @@
           <button type="button" role="radio" data-size="2" aria-checked="false">Large</button>
         </div>
       </fieldset>
+      <fieldset id="tableSet" hidden>
+        <legend>Your table</legend>
+        <label class="tick" id="listedRow"><input type="checkbox" id="listedBox"> <span>List this table publicly <small class="hint">It shows under Open tables on the front page so anyone can take a free seat.</small></span></label>
+        <label class="tick"><input type="checkbox" id="lockedBox"> <span>Lock table <small class="hint">Nobody new can join, even with the code. Seated players can still come back.</small></span></label>
+      </fieldset>
       <fieldset id="seatSet" hidden>
         <legend>Your seat</legend>
         <p class="hint">Your rejoin code gives you this character back on another device, or after clearing your browser. Keep it to yourself.</p>
@@ -151,7 +166,7 @@
     </div>
     <div class="dlg-body prose">
       <ol>
-        <li><b>Gather.</b> One player creates a party and shares the invite. Up to five can sit at the table. Everyone picks a class; the host picks the adventure and begins.</li>
+        <li><b>Gather.</b> One player creates a party and shares the invite, or friends find it under Open tables on the front page. Up to five can sit at the table. Everyone creates a character (race, class, background, scores and look); the host picks the adventure and begins.</li>
         <li><b>Say what you do.</b> In a scene, type what your character does or says, or ask the Dungeon Master a question. Everything sent while the DM is busy is answered together in the next reply.</li>
         <li><b>Roll when asked.</b> When the DM calls for a check, the named player presses Roll d20. The dice decide, and everyone sees the result.</li>
         <li><b>Fight in turns.</b> Combat uses buttons: pick a target, then attack, use an ability or spell, defend, or improvise a stunt. You can still ask the DM questions in a fight.</li>
@@ -193,6 +208,7 @@
 <script src="/engine.js"></script>
 <script src="/audio.js"></script>
 <script src="/net.js"></script>
+<script src="/figure.js"></script>
 <script src="/app.js"></script>
 <script src="/table.js"></script>
 </body>

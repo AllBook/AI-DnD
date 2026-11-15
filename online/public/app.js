@@ -62,6 +62,85 @@
   const LANGS = ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Dutch', 'Polish', 'Swedish', 'Turkish', 'Japanese', 'Korean', 'Chinese'];
   const FX = { stun: ['Stunned', 'bad'], slow: ['Slowed', 'warn'], weak: ['Weakened', 'warn'], invuln: ['Shielded', 'good'], str: ['Empowered', 'good'], guard: ['Guarding', 'good'] };
 
+  // ---------------- characters: races, backgrounds, looks (from the engine, with fallbacks) ----------------
+
+  const DATA = window.DND_DATA || {};
+  const own = (o, k) => o != null && typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+  const RACES = E.RACES || { Human: { bonus: { STR: 1, DEX: 1, CON: 1, INT: 1, WIS: 1, CHA: 1 }, trait: 'Versatile', desc: '+1 to every ability score.' } };
+  const BACKGROUNDS = E.BACKGROUNDS || {};
+  const LOOK = E.LOOK || {};
+  const STD_ARRAY = Array.isArray(E.STANDARD_ARRAY) ? E.STANDARD_ARRAY : [15, 14, 13, 12, 10, 8];
+  const POINT_COST = E.POINT_COST || { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
+  const POINTS = 27;
+  const RACE_NOTE = {
+    Human: 'Ambitious, adaptable and found everywhere.',
+    Elf: 'Graceful and long-lived, with eyes for the dark.',
+    Dwarf: 'Stout, stubborn and hard as the mountain.',
+    Halfling: 'Small, cheerful and improbably lucky.',
+    'Half-Orc': 'Fierce, strong and very hard to put down.',
+    Tiefling: 'Horned heirs of an infernal bargain.',
+    Dragonborn: 'Proud draconic kin with fire in their lungs.',
+    Gnome: 'Tiny, clever tinkerers and tricksters.',
+  };
+  const ABILITY_USE = { STR: 'melee blows, lifting, forcing doors', DEX: 'aim, stealth, quick hands', CON: 'hit points and grit', INT: 'lore, arcana, puzzles; mana', WIS: 'perception, insight, survival; mana', CHA: 'persuasion, deceit, presence; mana' };
+  const LOOK_ORDER = ['frame', 'body', 'skin', 'hair', 'hairStyle', 'beard', 'eyes', 'outfit', 'accent', 'mark'];
+  const LOOK_LABEL = { frame: 'Frame', body: 'Build', skin: 'Skin', hair: 'Hair colour', hairStyle: 'Hair style', beard: 'Beard', eyes: 'Eyes', outfit: 'Outfit', accent: 'Trim and metal', mark: 'Distinguishing mark' };
+  const LOOK_COLOR = { skin: 1, hair: 1, eyes: 1, outfit: 1, accent: 1 };
+  const COLOR_NAMES = {
+    skin: ['pale', 'fair', 'tan', 'brown', 'dark brown', 'deep brown', 'sage green', 'slate blue', 'russet', 'lilac'],
+    hair: ['black', 'dark brown', 'brown', 'auburn', 'blond', 'flaxen', 'red', 'grey', 'white', 'blue', 'green', 'violet'],
+    eyes: ['brown', 'blue', 'green', 'hazel', 'grey', 'red', 'gold', 'violet'],
+    outfit: ['crimson', 'navy', 'forest green', 'ochre', 'violet', 'charcoal', 'tan', 'linen'],
+    accent: ['gold', 'silver', 'copper', 'black iron', 'bone'],
+  };
+  const CHIP_NAME = { 'horns-small': 'Small horns', none: 'None', warpaint: 'War paint', eyepatch: 'Eye patch', topknot: 'Top knot' };
+  const chipName = (v) => CHIP_NAME[v] || String(v).charAt(0).toUpperCase() + String(v).slice(1).replace(/-/g, ' ');
+  const TRAIT_IDEAS = ['Laughs loudest when things go wrong.', 'Never breaks a promise, however foolish.', 'Collects a trinket from every place they visit.',
+    'Quotes old proverbs, usually wrong.', 'Suspicious of anyone too friendly.', 'Cannot resist a dare.', 'Hums when nervous.',
+    'Feeds every stray animal on the road.', 'Keeps a careful tally of every debt.', 'Talks to their weapon as if it were a friend.'];
+  const abilitiesOf = (p) => {
+    try { if (typeof E.abilitiesOf === 'function') return E.abilitiesOf(p).filter((id) => ABILITIES[id]); } catch (e) { /* fall through */ }
+    return ((CLASSES[p.cls] || {}).abilities || []).concat(p.race === 'Dragonborn' ? ['breath_weapon'] : []).filter((id) => ABILITIES[id]);
+  };
+  const speedOf = (p) => { try { if (typeof E.speedOf === 'function') return E.speedOf(p); } catch (e) { /* fall through */ } return (CLASSES[p.cls] || {}).speed || 6; };
+  const classSpells = (cls) => { const c = CLASSES[cls] || {}; return (c.spells || ((DATA.startingSpells || {})[cls]) || []).filter((id) => SPELLS[id]); };
+  const raceOf = (p) => (p && own(RACES, p.race) ? p.race : 'Human');
+  const bonusText = (race) => {
+    const b = (RACES[race] || {}).bonus || {};
+    const ks = ABILITY_NAMES.filter((k) => b[k]);
+    if (ks.length === 6 && ks.every((k) => b[k] === b.STR)) return `+${b.STR} to every score`;
+    return ks.sort((a, z) => b[z] - b[a]).map((k) => `+${b[k]} ${k}`).join(', ');
+  };
+  function defaultLook() {
+    const out = {};
+    // the same defaults the engine's cleanLook uses
+    for (const k in LOOK) out[k] = LOOK[k][k === 'frame' ? 2 : k === 'skin' || k === 'hairStyle' || k === 'body' ? 1 : 0];
+    return out;
+  }
+  function lookOf(p) {
+    const out = defaultLook();
+    const l = (p && p.look) || {};
+    for (const k in out) if (Array.isArray(LOOK[k]) && LOOK[k].includes(l[k])) out[k] = l[k];
+    return out;
+  }
+  const pickOf = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  function randomLook(race) {
+    const out = {};
+    for (const k in LOOK) out[k] = pickOf(LOOK[k]);
+    // natural-looking odds: mostly human skin tones (except for tieflings), fewer beards on feminine frames, marks are rarer
+    if (LOOK.skin && race !== 'Tiefling' && race !== 'Dragonborn' && Math.random() < 0.8) out.skin = pickOf(LOOK.skin.slice(0, 6));
+    if (LOOK.beard && out.frame === 'feminine' && Math.random() < 0.85) out.beard = 'none';
+    if (LOOK.mark && Math.random() < 0.5) out.mark = 'none';
+    if (LOOK.hair && Math.random() < 0.7) out.hair = pickOf(LOOK.hair.slice(0, 9));
+    return out;
+  }
+  // The gear a class starts with, by slot (for the creator's preview).
+  function classEq(cls) {
+    const eq = { weapon: null, armor: null, offhand: null, trinket: null };
+    ((CLASSES[cls] || {}).equip || []).forEach((id) => { const it = ITEMS[id]; if (it && it.slot) eq[it.slot] = id; });
+    return eq;
+  }
+
   // ---------------- safe wrappers: audio and transport may be partly missing ----------------
 
   const A = {
@@ -249,6 +328,7 @@
     Object.keys(seen).forEach((k) => { delete seen[k]; });
     $('log').replaceChildren();
     ui.panel = null; ui.kick = null; ui.give = null; ui.unread = false; ui.tab = 'story';
+    cc.open = false; cc.d = null; cc.err = ''; cc.busy = false;
     sel.enemy = null; sel.ally = null;
     // Losing the connection must never lose the seat: keep the token so "Join" brings you straight back.
     if (kept) { store.set('aidnd.session', kept); $('codeInput').value = kept.code; if (kept.name) $('nameInput').value = kept.name; } else store.set('aidnd.session', null);
@@ -502,29 +582,411 @@
       h('div', { class: 'tags' }, fxTags(e)))));
   }
 
-  // ---------------- lobby ----------------
+  // ---------------- character figures ----------------
+  // window.CharacterFigure (public/figure.js) draws the hero. Every call is guarded: when the
+  // script is missing or throws, a plain silhouette stands in so the page never breaks.
 
-  function classPicker(p) {
-    return h('div', { class: 'classes' }, Object.keys(CLASSES).map((name) => {
-      const c = CLASSES[name];
-      const eq = c.equip || [];
-      const wa = eq[0] && ITEMS[eq[0]] && ITEMS[eq[0]].stats ? ITEMS[eq[0]].stats.attack || 0 : 0;
-      const ar = eq[1] && ITEMS[eq[1]] && ITEMS[eq[1]].stats ? ITEMS[eq[1]].stats.defense || 0 : 0;
-      const on = !!p && p.cls === name;
-      return h('button', {
-        class: 'cls' + (on ? ' sel' : ''), type: 'button', 'data-k': 'cls-' + name, 'aria-pressed': String(on),
-        onclick: () => { const bio = keepVal('bio').trim(); send(bio ? { t: 'class', cls: name, bio } : { t: 'class', cls: name }); },
-      },
-      h('b', null, name), h('span', null, c.blurb || ''),
-      h('code', null, `HP ${c.hp} · ATK ${(c.atk || 0) + wa} · DEF ${(c.def || 0) + ar}`));
-    }));
+  const CF = () => { try { const f = window.CharacterFigure; return f && typeof f.svg === 'function' ? f : null; } catch (e) { return null; } };
+  const cfVer = () => { const f = CF(); return f ? f.version || 1 : 0; };
+  function silhouette(o) {
+    const full = o.view === 'full';
+    const box = full ? '0 0 60 120' : o.view === 'token' ? '0 0 60 60' : '6 0 48 48';
+    const w = full ? Math.round(o.size / 2) : o.size;
+    const kids = [sv('circle', { cx: 30, cy: 14, r: 10 }),
+      sv('path', { d: 'M14 30 Q30 24 46 30 L50 64 L43 64 L41 42 L40 70 L42 114 L33 114 L30 76 L27 114 L18 114 L20 70 L19 42 L17 64 L10 64 Z' })];
+    return sv('svg', { viewBox: box, width: w, height: o.size, class: 'cf-fallback' + (o.pose === 'down' ? ' down' : '') },
+      o.view === 'token' ? sv('g', { transform: 'translate(15 6) scale(.5)' }, kids) : kids);
   }
+  /** A character picture: player { race, cls, look, eq, name }, opts { view, size, pose, facing, animate }. */
+  function figureOf(p, opts) {
+    const o = Object.assign({ view: 'bust', size: 48, pose: 'idle', facing: 'right', animate: false }, opts || {});
+    const who = { race: raceOf(p), look: p && p.look ? p.look : undefined, name: (p && p.name) || '' };
+    if (p && p.cls) who.cls = p.cls;
+    if (p && p.eq) who.eq = p.eq;
+    let el = null;
+    const f = CF();
+    if (f) { try { el = f.svg(who, o); } catch (e) { el = null; } }
+    if (!el || !el.nodeType) el = silhouette(o);
+    try { el.setAttribute('aria-hidden', 'true'); el.setAttribute('focusable', 'false'); } catch (e) { /* not an element */ }
+    return h('span', { class: `cfig cfig-${o.view}${o.pose === 'down' ? ' is-down' : ''}${f ? '' : ' cfig-plain'}` }, el);
+  }
+  const narrow = () => { try { return window.matchMedia('(max-width: 620px)').matches; } catch (e) { return false; } };
+  const heroLine = (p) => (p.cls ? `${raceOf(p)} ${p.cls}` : 'creating a character…');
+
+  // ---------------- character creator ----------------
+  // A stepped wizard with a live preview. Its working copy lives here (cc.d) until "Create
+  // character" sends {t:'character'} to the table; the engine checks it and answers.
+
+  const STEPS = [['race', 'Race'], ['class', 'Class'], ['background', 'Background'], ['abilities', 'Abilities'], ['look', 'Appearance'], ['details', 'Details']];
+  const cc = { open: false, step: 0, d: null, err: '', busy: false };
+  const isStdArray = (sc) => !!sc && ABILITY_NAMES.map((k) => sc[k]).sort((a, b) => b - a).every((v, i) => v === STD_ARRAY[i]);
+  const buyCost = (sc) => ABILITY_NAMES.reduce((t, k) => t + (POINT_COST[sc[k]] == null ? 99 : POINT_COST[sc[k]]), 0);
+  const ccBase = (d) => (d.method === 'buy' ? d.buy : d.arr);
+  const modN = (score) => Math.floor(((score || 10) - 10) / 2);
+
+  /** The standard array placed on a class's key abilities first, then by the class's own leanings. */
+  function suggestedArr(cls) {
+    const c = CLASSES[cls];
+    const pri = ((c && c.primary) || []).filter((k) => ABILITY_NAMES.includes(k));
+    const lean = (k) => (c && c.scores && c.scores[k]) || 0;
+    const rest = ABILITY_NAMES.filter((k) => !pri.includes(k)).sort((a, b) => lean(b) - lean(a));
+    const out = {};
+    pri.concat(rest).forEach((k, i) => { out[k] = STD_ARRAY[i]; });
+    return out;
+  }
+
+  function ccInit(p) {
+    const has = !!(p && p.cls);
+    const base = p && p.base && ABILITY_NAMES.every((k) => p.base[k] >= 8 && p.base[k] <= 15) ? Object.assign({}, p.base) : null;
+    const arrOk = isStdArray(base);
+    const arr = arrOk ? base : suggestedArr(has ? p.cls : null);
+    const race = raceOf(p);
+    cc.d = {
+      race, cls: has && CLASSES[p.cls] ? p.cls : null,
+      background: p && own(BACKGROUNDS, p.background) ? p.background : (own(BACKGROUNDS, 'Folk Hero') ? 'Folk Hero' : Object.keys(BACKGROUNDS)[0] || null),
+      method: base && !arrOk ? 'buy' : 'array', arr, buy: base && !arrOk ? base : Object.assign({}, arr),
+      look: p && p.look ? lookOf(p) : randomLook(race),
+      bio: (p && p.bio) || '', traits: (p && p.traits) || '', pronouns: (p && p.pronouns) || '', touched: has,
+    };
+    cc.step = 0; cc.err = ''; cc.busy = false;
+  }
+  function ccSet(patch) {
+    Object.assign(cc.d, patch);
+    cc.err = '';
+    renderCreator();
+  }
+  function ccGo(step) {
+    cc.step = Math.max(0, Math.min(STEPS.length - 1, step));
+    cc.err = '';
+    renderCreator();
+    const head = document.querySelector('#creator .cc-body');
+    if (head) { try { head.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    const top = document.getElementById('creator');
+    if (top && top.getBoundingClientRect().top < 0) { try { top.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { top.scrollIntoView(); } }
+  }
+  function ccPickClass(cls) {
+    const d = cc.d;
+    const patch = { cls };
+    // until the player sets scores by hand, keep them on the new class's key abilities
+    if (!d.touched) { const s = suggestedArr(cls); patch.arr = s; patch.buy = Object.assign({}, s); }
+    ccSet(patch);
+  }
+  function ccSuggest() {
+    if (!cc.d.cls) return;
+    const s = suggestedArr(cc.d.cls);
+    ccSet({ method: 'array', arr: s, touched: true });
+  }
+  // Each array value is used once: picking a value another ability holds swaps the two.
+  function ccSetArr(k, v) {
+    const arr = Object.assign({}, cc.d.arr);
+    const other = ABILITY_NAMES.find((x) => x !== k && arr[x] === v);
+    if (other) arr[other] = arr[k];
+    arr[k] = v;
+    ccSet({ arr, touched: true });
+  }
+  function ccBuy(k, delta) {
+    const buy = Object.assign({}, cc.d.buy);
+    const v = buy[k] + delta;
+    if (v < 8 || v > 15) return;
+    buy[k] = v;
+    if (buyCost(buy) > POINTS) { cc.err = `Not enough points for ${ABILITY_FULL[k]} ${v}.`; renderCreator(); return; }
+    ccSet({ buy, touched: true });
+  }
+  function ccMethod(m) {
+    const d = cc.d;
+    if (m === d.method) return;
+    if (m === 'buy') {
+      // start the point buy from the current array (the standard array costs exactly 27)
+      const from = buyCost(d.arr) <= POINTS ? d.arr : null;
+      ccSet({ method: 'buy', buy: Object.assign({}, from || d.buy) });
+    } else ccSet({ method: 'array' });
+  }
+
+  /** What the engine will make of the current choices (mirrors Engine setClass). */
+  function ccStats(d) {
+    const rb = (RACES[d.race] || {}).bonus || {};
+    const base = ccBase(d);
+    const scores = {};
+    ABILITY_NAMES.forEach((k) => { scores[k] = Math.min(20, (base[k] || 8) + (rb[k] || 0)); });
+    const out = { scores, base, rb };
+    const c = CLASSES[d.cls];
+    if (!c) return out;
+    const m = (k) => modN(scores[k]);
+    const prime = c.primary ? c.primary[0] : 'STR';
+    const eq = classEq(d.cls);
+    const dwarf = d.race === 'Dwarf' ? 1 : 0;
+    const raw = { atk: Math.max(2, c.atk + m(prime) - 2), def: c.def + dwarf, eq, fx: [] };
+    const gear = Object.keys(c.gear || {}).map((id) => [id, c.gear[id]]);
+    const bgi = (BACKGROUNDS[d.background] || {}).item;
+    if (bgi && ITEMS[bgi]) { const g = gear.find((x) => x[0] === bgi); if (g) g[1] += 1; else gear.push([bgi, 1]); }
+    return Object.assign(out, {
+      prime, eq, gear,
+      hp: c.hp + 2 * m('CON') + dwarf, mana: 50 + Math.max(m('INT'), m('WIS'), m('CHA')) * 10,
+      atk: atkOf(raw), def: defOf(raw), speed: speedOf({ cls: d.cls }),
+      abilities: abilitiesOf({ cls: d.cls, race: d.race }), spells: classSpells(d.cls),
+    });
+  }
+
+  async function ccSubmit() {
+    const d = cc.d;
+    if (!d || cc.busy) return;
+    if (!d.cls) { cc.err = 'Choose a class first.'; cc.step = 1; renderCreator(); return; }
+    const base = ccBase(d);
+    if (d.method === 'buy' && buyCost(base) > POINTS) { cc.err = `Those scores cost ${buyCost(base)} points; you have ${POINTS}.`; cc.step = 3; renderCreator(); return; }
+    const read = (name, fallback) => { const el = document.querySelector(`#creator [data-keep="${name}"]`); return el ? el.value : fallback; };
+    d.bio = read('cc-bio', d.bio); d.traits = read('cc-traits', d.traits); d.pronouns = read('cc-pron', d.pronouns);
+    const action = {
+      t: 'character', cls: d.cls, race: d.race, background: d.background, scores: Object.assign({}, base), look: Object.assign({}, d.look),
+      bio: d.bio.trim(), traits: d.traits.trim(), pronouns: d.pronouns.trim(),
+    };
+    const editing = !!(me() && me().cls);
+    cc.busy = true; cc.err = '';
+    renderCreator();
+    const r = await act(action);
+    cc.busy = false;
+    if (r.ok) {
+      cc.open = false; cc.d = null; cc.err = '';
+      A.call('sfx', 'send');
+      toast(editing ? 'Character updated.' : `${(me() || {}).name || 'Your hero'} is ready. Welcome to the party!`, 'info');
+      delete sigs.cc;
+      render();
+      const card = document.getElementById('myChar');
+      if (card) { try { card.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    } else { cc.err = r.error; renderCreator(); }
+  }
+
+  const choice = (k, on, onclick, kids, extra) => h('button', Object.assign({ type: 'button', class: 'pick' + (on ? ' sel' : ''), 'data-k': k, 'aria-pressed': String(!!on), onclick }, extra || {}), kids);
+
+  function ccRaceStep(d) {
+    return [h('p', { class: 'hint' }, 'Your people shape your scores and give you one special trait.'),
+      h('div', { class: 'picks' }, Object.keys(RACES).map((r) => {
+        const R = RACES[r];
+        return choice('cc-race-' + r, d.race === r, () => ccSet({ race: r }), [
+          h('span', { class: 'pick-top' }, figureOf({ race: r, look: d.look, cls: d.cls, eq: d.cls ? classEq(d.cls) : null }, { view: 'bust', size: 56 }),
+            h('span', { class: 'pick-name' }, h('b', null, r), h('code', null, bonusText(r)))),
+          h('span', { class: 'pick-desc' }, RACE_NOTE[r] || ''),
+          h('span', { class: 'pick-fx' }, h('em', null, R.trait), ' — ', R.desc)]);
+      }))];
+  }
+  function ccClassStep(d) {
+    return [h('p', { class: 'hint' }, 'Your class decides how you fight, what you can cast and what you carry.'),
+      h('div', { class: 'picks' }, Object.keys(CLASSES).map((name) => {
+        const c = CLASSES[name];
+        const eq = classEq(name);
+        const raw = { atk: c.atk, def: c.def, eq, fx: [] };
+        const abil = abilitiesOf({ cls: name, race: d.race }).map((id) => ABILITIES[id].name);
+        const sp = classSpells(name).map((id) => SPELLS[id].name);
+        return choice('cc-cls-' + name, d.cls === name, () => ccPickClass(name), [
+          h('span', { class: 'pick-top' }, figureOf({ race: d.race, look: d.look, cls: name, eq }, { view: 'bust', size: 56 }),
+            h('span', { class: 'pick-name' }, h('b', null, name), h('code', null, `HP ${c.hp} · ATK ${atkOf(raw)} · DEF ${defOf(raw)} · Move ${c.speed || 6}`))),
+          h('span', { class: 'pick-desc' }, c.blurb || ''),
+          h('span', { class: 'pick-fx' }, h('em', null, 'Key: '), (c.primary || []).join(', '), ' · ', abil.concat(sp).join(', '))]);
+      }))];
+  }
+  function ccBackgroundStep(d) {
+    return [h('p', { class: 'hint' }, 'Where you come from: a skill you are good at, a keepsake and some starting coin.'),
+      h('div', { class: 'picks' }, Object.keys(BACKGROUNDS).map((b) => {
+        const B = BACKGROUNDS[b];
+        const it = ITEMS[B.item];
+        return choice('cc-bg-' + b, d.background === b, () => ccSet({ background: b }), [
+          h('span', { class: 'pick-name' }, h('b', null, b), h('code', null, `${B.skill} checks +2`)),
+          h('span', { class: 'pick-desc' }, B.desc),
+          h('span', { class: 'pick-fx' }, h('em', null, 'Starts with: '), `${it ? it.name : B.item} · +${B.gold || 0} gold`)]);
+      }))];
+  }
+  function ccAbilityStep(d, st) {
+    const c = CLASSES[d.cls];
+    const buy = d.method === 'buy';
+    const spent = buyCost(d.buy);
+    const left = POINTS - spent;
+    const pri = (c && c.primary) || [];
+    const rows = ABILITY_NAMES.map((k) => {
+      const v = ccBase(d)[k];
+      const bonus = st.rb[k] || 0;
+      const fin = st.scores[k];
+      const nextCost = v < 15 ? POINT_COST[v + 1] - POINT_COST[v] : null;
+      const ctl = buy
+        ? h('span', { class: 'stepper' },
+          btn('−', null, () => ccBuy(k, -1), { k: 'cc-dn-' + k, disabled: v <= 8, title: `Lower ${ABILITY_FULL[k]}`, cls: 'ghost' }),
+          h('b', { 'aria-live': 'polite' }, String(v)),
+          btn('+', null, () => ccBuy(k, 1), { k: 'cc-up-' + k, disabled: v >= 15 || nextCost > left, title: v >= 15 ? 'Point buy goes up to 15' : `Raise ${ABILITY_FULL[k]} (${nextCost} point${nextCost === 1 ? '' : 's'})`, cls: 'ghost' }))
+        : h('select', { 'data-k': 'cc-arr-' + k, 'aria-label': `${ABILITY_FULL[k]} score`, onchange: (ev) => ccSetArr(k, Number(ev.target.value)) },
+          STD_ARRAY.map((n) => h('option', { value: n, selected: n === v }, String(n))));
+      return h('div', { class: 'ab-row' + (pri.includes(k) ? ' key' : '') },
+        h('span', { class: 'ab-name' }, h('b', null, ABILITY_FULL[k]), pri.includes(k) && h('span', { class: 'tag warn' }, k === pri[0] ? 'attack' : 'key'),
+          h('small', null, ABILITY_USE[k])),
+        ctl,
+        h('span', { class: 'ab-bonus' + (bonus ? ' on' : ''), title: `${d.race} bonus` }, bonus ? `+${bonus}` : '—'),
+        h('span', { class: 'ab-final' }, h('b', null, String(fin)), h('small', null, mod(fin))),
+        buy && h('span', { class: 'ab-cost', title: 'Point cost' }, `${POINT_COST[v]} pt`));
+    });
+    return [
+      h('div', { class: 'modes ab-method', role: 'radiogroup', 'aria-label': 'How to set ability scores' },
+        [['array', 'Standard array'], ['buy', 'Point buy']].map(([m, l]) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(d.method === m), 'data-k': 'cc-m-' + m, onclick: () => ccMethod(m) }, l))),
+      h('p', { class: 'hint' }, buy
+        ? `Spend ${POINTS} points. Every score starts at 8 and goes up to 15; 14 and 15 cost more.`
+        : `Place ${STD_ARRAY.join(', ')} once each. Picking a number another ability has swaps the two.`),
+      h('div', { class: 'row ab-tools' },
+        btn(c ? `Suggested for ${d.cls}` : 'Suggested (pick a class first)', null, ccSuggest, { k: 'cc-suggest', disabled: !c, title: c ? `Put the highest scores on ${pri.join(' and ')}` : '' }),
+        buy && btn('All 8s', null, () => ccSet({ buy: ABILITY_NAMES.reduce((o, k) => Object.assign(o, { [k]: 8 }), {}), touched: true }), { k: 'cc-reset', cls: 'ghost' }),
+        buy && h('span', { class: 'points' + (left === 0 ? ' done' : ''), role: 'status' }, h('b', null, String(left)), ` of ${POINTS} points left`)),
+      h('div', { class: 'ab-table' + (buy ? ' buy' : '') },
+        h('div', { class: 'ab-row ab-headrow', 'aria-hidden': 'true' }, h('span', null, 'Ability'), h('span', null, 'Base'), h('span', null, 'Race'), h('span', null, 'Score'), buy && h('span', null, 'Cost')),
+        rows),
+      c && h('p', { class: 'hint' }, `${d.cls}: attacks use ${ABILITY_FULL[st.prime]}. Constitution adds hit points; the best of Intelligence, Wisdom and Charisma sets your mana.`)];
+  }
+  function ccLookStep(d) {
+    const groups = LOOK_ORDER.filter((k) => Array.isArray(LOOK[k]) && LOOK[k].length).map((k) => {
+      const color = !!LOOK_COLOR[k];
+      return h('div', { class: 'look-group', role: 'group', 'aria-label': LOOK_LABEL[k] || k },
+        h('span', { class: 'lbl' }, LOOK_LABEL[k] || k),
+        h('div', { class: color ? 'swatches' : 'chipset' }, LOOK[k].map((v, i) => {
+          const on = d.look[k] === v;
+          const name = color ? ((COLOR_NAMES[k] || [])[i] || `${LOOK_LABEL[k]} ${i + 1}`) : chipName(v);
+          return h('button', {
+            type: 'button', class: color ? 'swatch' + (on ? ' sel' : '') : 'chipbtn' + (on ? ' sel' : ''), 'data-k': `cc-look-${k}-${i}`, 'aria-pressed': String(on),
+            'aria-label': color ? `${LOOK_LABEL[k]}: ${name}` : null, title: color ? name : null,
+            onclick: () => ccSet({ look: Object.assign({}, d.look, { [k]: v }) }),
+          }, color ? h('span', { style: { background: v } }) : name);
+        })));
+    });
+    return [h('div', { class: 'row' }, btn('Randomise look', null, () => ccSet({ look: randomLook(d.race) }), { k: 'cc-random' }),
+      h('span', { class: 'hint' }, 'Your figure on the left changes as you choose.')),
+    h('div', { class: 'looks' }, groups)];
+  }
+  function ccDetailStep(d, p) {
+    const text = (key, label, field, max, ph) => h('div', { class: 'field' },
+      h('label', { for: 'f-' + key }, label),
+      h('input', { id: 'f-' + key, type: 'text', maxlength: max, 'data-keep': key, value: d[field] || '', placeholder: ph, autocomplete: 'off',
+        oninput: (ev) => { d[field] = ev.target.value; },
+        onkeydown: (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); ccSubmit(); } } }));
+    return [
+      h('div', { class: 'field' }, h('span', null, 'Name'), h('p', { class: 'cc-name' }, p.name, h('small', null, ' (the name you joined with)'))),
+      h('div', { class: 'field' },
+        h('label', { for: 'f-cc-pron' }, 'Pronouns (optional)'),
+        h('div', { class: 'row' },
+          h('input', { id: 'f-cc-pron', type: 'text', maxlength: 20, 'data-keep': 'cc-pron', value: d.pronouns || '', placeholder: 'e.g. she/her', autocomplete: 'off', oninput: (ev) => { d.pronouns = ev.target.value; } }),
+          ['she/her', 'he/him', 'they/them'].map((x) => btn(x, null, () => { d.pronouns = x; const el = document.querySelector('#creator [data-keep="cc-pron"]'); if (el) el.value = x; renderCreator(); }, { k: 'cc-pron-' + x, cls: 'ghost mini' })))),
+      text('cc-bio', 'Concept (one line)', 'bio', 160, 'e.g. a retired smuggler looking for her brother'),
+      h('div', { class: 'field' },
+        h('label', { for: 'f-cc-traits' }, 'Personality trait'),
+        h('div', { class: 'row' },
+          h('input', { id: 'f-cc-traits', type: 'text', maxlength: 160, 'data-keep': 'cc-traits', value: d.traits || '', placeholder: 'e.g. hums when nervous', autocomplete: 'off', oninput: (ev) => { d.traits = ev.target.value; } }),
+          btn('Inspire me', null, () => { d.traits = pickOf(TRAIT_IDEAS); const el = document.querySelector('#creator [data-keep="cc-traits"]'); if (el) el.value = d.traits; renderCreator(); }, { k: 'cc-trait-idea', cls: 'ghost mini' }))),
+      h('p', { class: 'hint' }, 'The Dungeon Master reads your concept and trait, and plays the world around them.')];
+  }
+
+  function ccQuick(d, st, p) {
+    const c = CLASSES[d.cls];
+    const pill = (lbl, v, cls) => h('span', { class: 'pill' + (cls ? ' ' + cls : '') }, h('small', null, lbl), h('b', null, String(v)));
+    return h('div', { class: 'cc-quick' },
+      h('div', { class: 'who' }, h('b', null, p.name), h('span', null, [d.race, d.cls || '(no class yet)'].join(' '), d.background ? ` · ${d.background}` : '')),
+      h('div', { class: 'scores' }, ABILITY_NAMES.map((a) => h('span', { title: `${ABILITY_FULL[a]} ${st.base[a]}${st.rb[a] ? ` + ${st.rb[a]} (${d.race})` : ''}`, class: st.rb[a] ? 'boosted' : null },
+        a, h('b', null, String(st.scores[a])), h('small', null, mod(st.scores[a]))))),
+      c && h('div', { class: 'pills' }, pill('HP', st.hp), pill('MP', st.mana), pill('ATK', st.atk, 'atk'), pill('DEF', st.def, 'def'), pill('Move', st.speed)));
+  }
+  function ccSummary(d, st) {
+    const c = CLASSES[d.cls];
+    const R = RACES[d.race] || {};
+    const B = BACKGROUNDS[d.background];
+    const sec = (title, kids) => h('section', { class: 'cc-sec' }, h('h4', null, title), kids);
+    const list = (items) => h('ul', null, items);
+    return h('div', { class: 'cc-sum', 'aria-label': 'Character summary' },
+      c ? sec('Abilities and spells', list([
+        st.abilities.map((id) => { const a = ABILITIES[id]; return h('li', null, h('b', null, a.name), h('small', null, ` ability · ${a.cd >= 20 ? 'once per fight' : a.cd <= 1 ? 'every turn' : 'every ' + a.cd + ' turns'}${a.range ? ' · range ' + a.range : ''}`), h('p', null, a.desc)); }),
+        st.spells.map((id) => { const s = SPELLS[id]; return h('li', null, h('b', null, s.name), h('small', null, ` spell · ${s.mana_cost || 0} MP`), h('p', null, s.description || '')); }),
+      ])) : sec('Abilities and spells', h('p', { class: 'hint' }, 'Choose a class to see what you can do.')),
+      c && sec('Starting gear', list(st.gear.map(([id, n]) => {
+        const it = itemOf(id);
+        const worn = SLOT_LIST.some((s) => st.eq[s] === id);
+        return h('li', { class: 'gear' }, itemIcon(id, 22), h('span', null, h('b', null, qtyLabel(n, it.name)), worn && h('span', { class: 'tag good' }, 'equipped'), statLine(it) && h('small', null, ' ' + statLine(it))));
+      }))),
+      sec('Racial trait', h('p', null, h('b', null, `${R.trait || '—'}`), ` (${d.race}): ${R.desc || ''}`)),
+      B && sec('Background feature', h('p', null, h('b', null, d.background), `: ${B.desc} Starts with ${(ITEMS[B.item] || { name: B.item }).name} and ${B.gold || 0} extra gold.`)));
+  }
+
+  function creatorView(p, lobby) {
+    const d = cc.d;
+    const st = ccStats(d);
+    const editing = !!p.cls;
+    const phone = narrow();
+    const last = cc.step === STEPS.length - 1;
+    const body = [ccRaceStep, ccClassStep, ccBackgroundStep, ccAbilityStep, ccLookStep, ccDetailStep][cc.step];
+    const preview = figureOf({ race: d.race, cls: d.cls, look: d.look, eq: d.cls ? classEq(d.cls) : null, name: p.name }, { view: 'full', size: phone ? 200 : 300, pose: 'ready', animate: true });
+    const done = (i) => (i === 1 ? !!d.cls : i < cc.step || (i === 3 && d.touched));
+    const createLabel = cc.busy ? 'Saving…' : editing ? 'Save changes' : 'Create character';
+    return h('div', { class: 'cc', id: 'creator' },
+      h('div', { class: 'cc-head' },
+        h('h3', null, editing ? 'Edit your character' : lobby ? 'Create your character' : 'Create your character to join the story'),
+        editing && btn('Cancel', null, () => { cc.open = false; cc.d = null; delete sigs.cc; render(); }, { cls: 'ghost mini', k: 'cc-cancel' })),
+      h('div', { class: 'cc-grid' },
+        h('div', { class: 'cc-side' }, h('div', { class: 'cc-stage', role: 'img', 'aria-label': `Preview of ${p.name}, ${d.race}${d.cls ? ' ' + d.cls : ''}` }, preview), ccQuick(d, st, p)),
+        h('div', { class: 'cc-main' },
+          h('ol', { class: 'cc-steps', 'aria-label': 'Steps' }, STEPS.map(([k, l], i) => h('li', null,
+            h('button', { type: 'button', 'data-k': 'cc-step-' + k, class: (i === cc.step ? 'on' : '') + (done(i) ? ' done' : ''), 'aria-current': i === cc.step ? 'step' : null, onclick: () => ccGo(i) },
+              h('span', { class: 'n', 'aria-hidden': 'true' }, String(i + 1)), l)))),
+          h('div', { class: 'cc-body', tabindex: '-1', role: 'group', 'aria-label': `Step ${cc.step + 1} of ${STEPS.length}: ${STEPS[cc.step][1]}` }, body(d, cc.step === 3 ? st : p, p)),
+          !!cc.err && h('p', { class: 'note cc-err', role: 'alert' }, cc.err),
+          h('div', { class: 'cc-nav' },
+            btn('Back', null, () => ccGo(cc.step - 1), { k: 'cc-back', disabled: cc.step === 0, cls: 'ghost' }),
+            !last && btn(cc.step === 1 && !d.cls ? 'Pick a class to continue' : `Next: ${STEPS[cc.step + 1][1]}`, null, () => ccGo(cc.step + 1), { k: 'cc-next', disabled: cc.step === 1 && !d.cls }),
+            btn(createLabel, !d.cls ? 'choose a class first' : null, ccSubmit, { k: 'cc-create', cls: 'primary' + (last ? ' big' : ''), disabled: !d.cls || cc.busy })),
+          ccSummary(d, st))));
+  }
+
+  function myCharCard(p, lobby) {
+    const B = BACKGROUNDS[p.background];
+    const R = RACES[raceOf(p)] || {};
+    const abil = abilitiesOf(p).map((id) => ABILITIES[id].name).concat((p.spells || []).filter((id) => SPELLS[id]).map((id) => SPELLS[id].name));
+    return h('div', { class: 'mychar', id: 'myChar', tabindex: '-1' },
+      figureOf(p, { view: 'full', size: narrow() ? 150 : 190, pose: 'idle', animate: true }),
+      h('div', { class: 'mychar-tx' },
+        h('h3', null, 'Your character'),
+        h('p', { class: 'mychar-name' }, h('b', null, p.name), ` — ${raceOf(p)} ${p.cls}`, p.background ? `, ${p.background}` : '', p.pronouns ? ` (${p.pronouns})` : ''),
+        !!p.bio && h('p', { class: 'bio' }, p.bio),
+        !!p.traits && h('p', { class: 'hint' }, p.traits),
+        h('div', { class: 'pills' },
+          [['HP', p.maxHp], ['MP', p.maxMana], ['ATK', atkOf(p), 'atk'], ['DEF', defOf(p), 'def'], ['Move', speedOf(p)]].map(([l, v, c]) => h('span', { class: 'pill' + (c ? ' ' + c : '') }, h('small', null, l), h('b', null, String(v))))),
+        h('div', { class: 'tags' },
+          R.trait && h('span', { class: 'tag warn', title: R.desc || '' }, R.trait),
+          B && h('span', { class: 'tag', title: B.desc }, `${p.background}: ${B.skill} +2`),
+          abil.map((n) => h('span', { class: 'tag good' }, n))),
+        lobby && h('div', { class: 'btns' }, btn('Edit character', 'race, class, scores, look', () => { ccInit(p); cc.open = true; delete sigs.cc; render(); const b = document.querySelector('#creator .cc-body'); if (b) { try { b.focus(); } catch (e) { /* ignore */ } } }, { k: 'cc-edit' }))));
+  }
+
+  function renderCreator() {
+    const box = $('ccBox');
+    const p = me();
+    if (!box || !p || !state) return;
+    const lobby = state.phase === 'lobby';
+    const wizard = !p.cls || (lobby && cc.open);
+    if (!wizard) { cc.open = false; cc.d = null; }
+    else if (!cc.d) ccInit(p);
+    const phone = narrow();
+    paint('cc', box, wizard ? ['w', cc.step, cc.d, cc.err, cc.busy, p.name, p.cls, lobby, phone, cfVer()] : ['card', p, lobby, phone, cfVer()],
+      () => (wizard ? creatorView(p, lobby) : myCharCard(p, lobby)));
+  }
+
+  // ---------------- lobby ----------------
 
   function optSelect(label, key, pairs, cur) {
     const list = pairs.some((x) => x[0] === cur) || !cur ? pairs : pairs.concat([[cur, cur]]);
     return h('label', { class: 'field' }, h('span', null, label),
       h('select', { 'data-k': 'opt-' + key, onchange: async (ev) => { if (!(await send({ t: 'opts', [key]: ev.target.value }))) { delete sigs.lobby; render(); } } },
         list.map((x) => h('option', { value: x[0], selected: x[0] === cur }, x[1]))));
+  }
+
+  // Host switches for who can find and join the table.
+  function tableToggle(key, on, label, help) {
+    return h('label', { class: 'tick toggle' },
+      h('input', { type: 'checkbox', 'data-k': 'opt-' + key, checked: on,
+        onchange: async (ev) => { const v = !!ev.target.checked; if (!(await send({ t: 'opts', [key]: v }))) { ev.target.checked = !v; } else toast(key === 'listed' ? (v ? 'Your table is listed on the front page.' : 'Your table is private now.') : (v ? 'Table locked: no new players can join.' : 'Table unlocked.'), 'info'); } }),
+      h('span', null, h('b', null, label), h('small', null, help)));
+  }
+  function tableOpts(o) {
+    return h('div', { class: 'table-opts' },
+      !isArtifact() && tableToggle('listed', o.listed !== false, 'List this table publicly', 'It appears under Open tables on the front page, so anyone can see it and take a free seat. Off: only people with your code or link can join.'),
+      tableToggle('locked', !!o.locked, 'Lock table', 'Nobody new can join, not even with the code. Players already seated can always come back to their seat.'));
   }
 
   function inviteBlock() {
@@ -544,39 +1006,45 @@
 
   function renderLobby() {
     const box = $('lobby');
-    const on = state.phase === 'lobby';
+    const p = me();
+    const lobby = state.phase === 'lobby';
+    const on = lobby || (!!p && !p.cls);
     box.hidden = !on;
-    if (!on) { delete sigs.lobby; return; }
-    paint('lobby', box, [state.players, state.order, state.host, state.opts, state.code, session.rejoin, myId], () => {
-      const p = me();
+    if (!on) { delete sigs.lobbyTop; delete sigs.lobby; delete sigs.cc; cc.open = false; cc.d = null; return; }
+    if (!$('ccBox') || !box.contains($('ccBox'))) {
+      box.replaceChildren(h('div', { id: 'lobbyTop', class: 'lobby-part' }), h('div', { id: 'ccBox', class: 'lobby-part' }), h('div', { id: 'lobbyRest', class: 'lobby-part' }));
+      delete sigs.lobbyTop; delete sigs.lobby; delete sigs.cc;
+    }
+    $('lobbyTop').hidden = !lobby;
+    $('lobbyRest').hidden = !lobby;
+    renderCreator();
+    if (!lobby) return;
+    const seats = state.order.filter((id) => state.players[id]);
+    const roster = seats.map((id) => { const q = state.players[id]; return [id, q.name, q.cls, q.race, q.look, q.online, q.eq, q.level]; });
+    paint('lobbyTop', $('lobbyTop'), [roster, state.host, myId, cfVer(), !!(state.opts || {}).locked], () => [
+      h('h2', null, 'The party gathers'),
+      h('ul', { class: 'roster' }, seats.map((id) => {
+        const q = state.players[id];
+        return h('li', { class: 'rs' + (q.cls ? ' ready' : ' pending') + (id === myId ? ' me' : '') },
+          figureOf(q, { view: 'bust', size: 64 }),
+          h('span', { class: 'rs-tx' },
+            h('b', null, h('i', { class: 'dot' + (q.online === false ? ' off' : ''), title: q.online === false ? 'Offline' : 'Online' }), q.name + (id === myId ? ' (you)' : '')),
+            h('span', null, heroLine(q)),
+            h('span', { class: 'tags' }, id === state.host && h('span', { class: 'tag warn' }, 'Host'), h('span', { class: 'tag ' + (q.cls ? 'good' : '') }, q.cls ? 'ready' : 'choosing'))));
+      }), seats.length < MAX_PLAYERS && h('li', { class: 'rs open' },
+        h('span', { class: 'cfig cfig-bust seat-empty', 'aria-hidden': 'true' }),
+        h('span', { class: 'rs-tx' }, h('b', null, plural(MAX_PLAYERS - seats.length, 'open seat', 'open seats')), h('span', null, (state.opts || {}).locked ? 'locked by the host' : 'invite a friend below')))),
+      h('p', { class: 'hint' }, `${seats.length} of ${MAX_PLAYERS} seats taken. Friends can also join after you set out.`)]);
+
+    paint('lobby', $('lobbyRest'), [roster, state.host, state.opts, state.code, session.rejoin, myId, isArtifact()], () => {
       const o = state.opts || {};
       const host = isHost();
       const hostP = state.players[state.host];
-      const seats = state.order.filter((id) => state.players[id]);
       const ready = seats.filter((id) => state.players[id].cls).length;
       const advs = ADVENTURES.some((a) => a.id === 'custom') ? ADVENTURES
         : ADVENTURES.concat([{ id: 'custom', title: 'Your own premise', blurb: 'Describe the adventure you want and the Dungeon Master will run it.' }]);
       const adv = advs.find((a) => a.id === o.adventure);
       const kids = [];
-
-      kids.push(h('h2', null, 'The party gathers'),
-        h('ul', { class: 'roster' }, seats.map((id) => {
-          const q = state.players[id];
-          return h('li', null,
-            h('i', { class: 'dot' + (q.online === false ? ' off' : '') }),
-            h('b', null, q.name + (id === myId ? ' (you)' : '')),
-            id === state.host && h('span', { class: 'tag warn' }, 'Host'),
-            h('span', { class: 'tag ' + (q.cls ? 'good' : '') }, q.cls ? `${q.cls} · ready` : 'choosing…'));
-        })),
-        h('p', { class: 'hint' }, `${seats.length} of ${MAX_PLAYERS} seats taken. Friends can also join after you set out.`));
-
-      kids.push(h('h3', null, p && p.cls ? 'Your class (tap another to change)' : 'Choose your class'), classPicker(p),
-        h('div', { class: 'field' },
-          h('label', { for: 'bioInput' }, 'Character concept (optional, one line)'),
-          h('div', { class: 'row' },
-            h('input', { id: 'bioInput', type: 'text', maxlength: 120, 'data-keep': 'bio', value: (p && p.bio) || '', placeholder: 'e.g. a retired smuggler looking for her brother',
-              onkeydown: (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); saveBio(); } } }),
-            btn('Save', null, saveBio, { k: 'save-bio' }))));
 
       kids.push(h('h3', null, 'The adventure'));
       if (host) {
@@ -594,17 +1062,19 @@
           optSelect('Tone', 'tone', TONES, o.tone),
           optSelect('Difficulty', 'difficulty', DIFFS, o.difficulty),
           optSelect('Language', 'lang', LANGS.map((l) => [l, l]), o.lang)));
+        kids.push(h('h3', null, 'Who can join'), tableOpts(o));
       } else {
         const label = (pairs, v) => (pairs.find((x) => x[0] === v) || [v, v || '—'])[1];
         kids.push(h('div', { class: 'summary' },
           h('p', null, h('b', null, adv ? adv.title : 'Not chosen yet'), adv && adv.blurb ? ' — ' + adv.blurb : ''),
           o.adventure === 'custom' && !!o.premise && h('p', { class: 'premise' }, o.premise),
-          h('p', { class: 'hint' }, `Tone: ${label(TONES, o.tone)} · Difficulty: ${label(DIFFS, o.difficulty)} · Language: ${o.lang || 'English'}`)));
+          h('p', { class: 'hint' }, `Tone: ${label(TONES, o.tone)} · Difficulty: ${label(DIFFS, o.difficulty)} · Language: ${o.lang || 'English'}`),
+          h('p', { class: 'hint' }, [isArtifact() ? null : (o.listed === false ? 'Private table' : 'Listed publicly'), o.locked ? 'locked to new players' : null].filter(Boolean).join(' · '))));
       }
 
       if (host) {
         kids.push(h('div', { class: 'btns' }, btn('Begin the adventure', `${ready} of ${seats.length} ready`, { t: 'start' }, { cls: 'primary big', disabled: ready === 0 })),
-          ready === 0 && h('p', { class: 'hint' }, 'At least one adventurer needs a class before you can begin.'));
+          ready === 0 && h('p', { class: 'hint' }, 'At least one adventurer needs a character before you can begin.'));
       } else {
         kids.push(h('p', { class: 'hint' }, `Waiting for ${hostP ? hostP.name : 'the host'} to begin the adventure.`));
         if (hostP && hostP.online === false) kids.push(h('div', { class: 'btns' }, btn('Claim host', `${hostP.name} is offline`, { t: 'claimhost' })));
@@ -615,10 +1085,104 @@
     });
   }
 
-  function saveBio() {
-    const p = me();
-    if (!p || !p.cls) { toast('Pick a class first, then save your concept.'); return; }
-    send({ t: 'class', cls: p.cls, bio: keepVal('bio').trim() });
+  // ---------------- open tables (join screen, server mode) ----------------
+  // GET /api/tables lists the parties whose host lets them be found. Refreshed every 10 s
+  // while the join screen shows.
+
+  const tbl = { data: null, err: '', at: 0, loading: false, want: null };
+  const tablesOn = () => netReady && !!N && !isArtifact() && !(session && state);
+  const ago = (t) => {
+    const s = Math.max(0, (Date.now() - Number(t || 0)) / 1000);
+    if (s < 60) return 'active just now';
+    if (s < 3600) return `active ${Math.round(s / 60)} min ago`;
+    if (s < 86400) return `active ${Math.round(s / 3600)} h ago`;
+    return `active ${Math.round(s / 86400)} d ago`;
+  };
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const PHASE_LINE = { lobby: 'Gathering in the lobby', scene: 'Adventuring', combat: 'In a fight', defeat: 'Regrouping after a defeat', victory: 'Celebrating a victory' };
+
+  async function loadTables() {
+    if (!tablesOn() || tbl.loading) { renderTables(); return; }
+    tbl.loading = true;
+    try {
+      const r = await fetch('/api/tables', { cache: 'no-store' });
+      if (!r.ok) throw new Error('status ' + r.status);
+      const j = await r.json();
+      tbl.data = j && Array.isArray(j.tables) ? j : { tables: [], playing: 0, parties: 0 };
+      tbl.err = '';
+    } catch (e) { tbl.err = 'Could not load the open tables. Retrying shortly.'; }
+    tbl.loading = false;
+    tbl.at = Date.now();
+    renderTables();
+  }
+
+  function joinTable(t) {
+    const saved = store.get('aidnd.session');
+    const mine = !!saved && saved.code === t.code && !!saved.token;
+    $('codeInput').value = t.code;
+    if (!mine && !$('nameInput').value.trim()) {
+      tbl.want = t.code;
+      renderTables();
+      joinNote(`Type your adventurer's name first, then press Join to sit down at “${t.title}”.`);
+      $('nameInput').focus();
+      return;
+    }
+    tbl.want = null;
+    start(false);
+  }
+
+  function tableCard(t, savedCode) {
+    const mine = savedCode === t.code;
+    const full = t.seats <= 0;
+    const why = mine ? null : t.locked ? 'The host has locked this table' : full ? 'This table is full' : null;
+    const where = t.phase === 'lobby' ? PHASE_LINE.lobby : `${PHASE_LINE[t.phase] || 'Adventuring'}: ${t.location || 'somewhere unknown'}`;
+    const tone = (TONES.find((x) => x[0] === t.tone) || [0, t.tone || ''])[1];
+    const diff = (DIFFS.find((x) => x[0] === t.difficulty) || [0, t.difficulty || ''])[1];
+    const players = Array.isArray(t.players) ? t.players : [];
+    return h('article', { class: 'tcard' + (t.online > 0 ? ' live' : '') + (why ? ' closed' : '') + (tbl.want === t.code ? ' want' : ''), 'aria-label': t.title },
+      h('div', { class: 'tc-head' },
+        h('h3', null, t.title || 'An adventure'),
+        h('span', { class: 'chip ' + (t.online > 0 ? 'good' : '') }, h('i', { class: 'dot' + (t.online > 0 ? '' : ' off'), 'aria-hidden': 'true' }), t.online > 0 ? `${t.online} online now` : 'nobody online')),
+      h('p', { class: 'tc-where' }, where),
+      h('p', { class: 'tc-meta' }, [tone, diff, t.lang && t.lang !== 'English' ? t.lang : null, t.host ? `host ${t.host}` : null, ago(t.updated)].filter(Boolean).join(' · ')),
+      h('ul', { class: 'tc-party', 'aria-label': 'The party' },
+        players.map((q) => h('li', { class: q.online ? 'on' : 'off' },
+          figureOf(q, { view: 'bust', size: 46 }),
+          h('span', { class: 'tc-who' },
+            h('b', null, h('i', { class: 'dot' + (q.online ? '' : ' off'), title: q.online ? 'Online now' : 'Away' }), q.name),
+            h('small', null, q.cls ? `${q.race || 'Human'} ${q.cls} · Lv ${q.level || 1}` : 'creating a character')))),
+        t.seats > 0 && h('li', { class: 'seat' }, h('span', { class: 'cfig cfig-bust seat-empty', 'aria-hidden': 'true' }),
+          h('span', { class: 'tc-who' }, h('small', null, t.seats === 1 ? 'Open seat' : 'Open seats')))),
+      h('div', { class: 'tc-foot' },
+        h('span', { class: 'tc-seats' + (why ? ' bad' : '') }, why || (mine ? 'Your seat is waiting' : plural(t.seats, 'seat free', 'seats free'))),
+        h('button', { type: 'button', class: 'primary big', 'data-k': 'tjoin-' + t.code, disabled: !!why, onclick: () => joinTable(t) }, mine ? 'Rejoin your seat' : 'Join this table')));
+  }
+
+  function renderTables() {
+    const box = $('tablesBox');
+    if (!box) return;
+    const show = tablesOn();
+    box.hidden = !show;
+    $('joinView').classList.toggle('with-tables', show);
+    if (!show) { delete sigs.tables; return; }
+    const d = tbl.data;
+    const saved = store.get('aidnd.session');
+    const savedCode = saved && saved.token ? saved.code : null;
+    const tables = d ? d.tables : [];
+    const live = tables.filter((t) => t.online > 0);
+    const listedOnline = tables.reduce((n, t) => n + (t.online || 0), 0);
+    const priv = Math.max(0, ((d && d.playing) || 0) - listedOnline);
+    $('tablesCount').textContent = !d ? (tbl.err || 'Looking for open tables…')
+      : (listedOnline ? `${plural(listedOnline, 'person', 'people')} playing now in ${plural(live.length, 'party', 'parties')}` : 'Nobody is at an open table right now')
+        + (priv ? ` · ${priv} more at private tables` : '');
+    const minute = Math.floor(Date.now() / 60000);
+    paint('tables', $('tablesList'), [tables, tbl.err, tbl.want, savedCode, minute, cfVer(), !!d], () => {
+      if (!d) return h('p', { class: 'hint' }, tbl.err || 'Loading…');
+      const kids = [];
+      if (tbl.err) kids.push(h('p', { class: 'note' }, tbl.err));
+      if (!tables.length) kids.push(h('div', { class: 'tables-empty' }, h('b', null, 'No open tables right now.'), h('span', null, 'Create one and your friends can find it here.')));
+      return kids.concat(tables.map((t) => tableCard(t, savedCode)));
+    });
   }
 
   // ---------------- DM status and check card ----------------
@@ -746,7 +1310,8 @@
     paint('dock', box, [ph, p, state.scene, c, ui.panel, sel, idle, state.host, roster], () => {
       const kids = [];
       if (!p.cls) {
-        kids.push(h('div', { class: 'turn' }, 'Choose your class to join the story'), classPicker(p));
+        kids.push(h('div', { class: 'turn' }, 'Create your character to join the story'),
+          h('p', { class: 'hint' }, 'Finish the character creator and press Create character. You join the party straight away.'));
         return kids;
       }
       if (ph === 'scene') {
@@ -772,11 +1337,13 @@
               h('span', { class: 'wide' }, '. Tap a foe or a party member to change.')),
             h('div', { class: 'btns' },
               btn('Attack', `ATK ${atkOf(p)}`, { t: 'attack', target: sel.enemy }, { cls: 'primary' }),
-              ((CLASSES[p.cls] || {}).abilities || []).filter((id) => ABILITIES[id]).map((id) => {
+              abilitiesOf(p).map((id) => {
                 const a = ABILITIES[id];
                 const cd = cdOf(p, 'a', id);
-                return btn(a.name, cd ? `ready in ${cd}` : 'ability', { t: 'ability', id, target: a.target === 'ally' ? (state.players[sel.ally] ? sel.ally : myId) : sel.enemy },
-                  { disabled: cd > 0, title: a.desc, k: 'abil-' + id });
+                const spent = id === 'breath_weapon' && !!(p.used && p.used.breath);
+                const note = spent || cd > 20 ? 'used this fight' : cd ? `ready in ${cd}` : a.range ? `ability · range ${a.range}` : 'ability';
+                return btn(a.name, note, { t: 'ability', id, target: a.target === 'ally' ? (state.players[sel.ally] ? sel.ally : myId) : sel.enemy },
+                  { disabled: cd > 0 || spent, title: a.desc, k: 'abil-' + id });
               }),
               (p.spells || []).map((id) => spellBtn(p, id)),
               btn('Defend', 'brace this round', { t: 'defend' }),
@@ -931,16 +1498,18 @@
     const hostP = state.players[state.host];
     const lobby = state.phase === 'lobby';
     const seats = state.order.filter((id) => state.players[id]);
-    paint('party', $('party'), [state.players, state.order, state.host, cur, sel.ally, ui.kick, myId, lobby], () => {
+    paint('party', $('party'), [state.players, state.order, state.host, cur, sel.ally, ui.kick, myId, lobby, cfVer()], () => {
       const kids = seats.map((id) => {
         const p = state.players[id];
         const cls = ['pc', cur === id && 'turn', sel.ally === id && 'sel', p.cls && !p.alive && 'down'].filter(Boolean).join(' ');
         return h('div', { class: cls },
           h('button', { class: 'pc-main', type: 'button', 'data-k': 'pc-' + id, 'aria-pressed': String(sel.ally === id), title: 'Target this ally for heals, items and gifts',
             onclick: () => { sel.ally = sel.ally === id ? null : id; render(); } },
-          h('div', { class: 'nm' },
-            h('b', null, h('i', { class: 'dot' + (p.online === false ? ' off' : '') }), p.name + (id === myId ? ' (you)' : '')),
-            h('span', null, p.cls ? `${p.cls} · Lv ${p.level}` : 'choosing…')),
+          h('div', { class: 'pc-row' },
+            figureOf(p, { view: 'bust', size: 52, pose: p.cls && !p.alive ? 'down' : 'idle' }),
+            h('div', { class: 'nm' },
+              h('b', null, h('i', { class: 'dot' + (p.online === false ? ' off' : '') }), p.name + (id === myId ? ' (you)' : '')),
+              h('span', null, p.cls ? `${raceOf(p)} ${p.cls} · Lv ${p.level}` : 'creating a character…'))),
           !!p.cls && bar('hp', p.hp, p.maxHp),
           !!p.cls && bar('mp', p.mana, p.maxMana),
           !!p.cls && h('div', { class: 'nums' }, h('span', null, `HP ${p.hp}/${p.maxHp}`), h('span', null, `MP ${p.mana}/${p.maxMana}`)),
@@ -1078,11 +1647,7 @@
   }
   // Empty equipment slot: a faint outline of what belongs there.
   const SLOT_SAMPLE = { weapon: 'iron_sword', armor: 'leather_armor', offhand: 'shield', trinket: 'ring_of_might' };
-  function figure() {
-    return sv('svg', { viewBox: '0 0 60 120', class: 'figure', 'aria-hidden': 'true', focusable: 'false' },
-      sv('circle', { cx: 30, cy: 14, r: 10 }),
-      sv('path', { d: 'M14 30 Q30 24 46 30 L50 64 L43 64 L41 42 L40 70 L42 114 L33 114 L30 76 L27 114 L18 114 L20 70 L19 42 L17 64 L10 64 Z' }));
-  }
+
 
   // ---------------- inventory: data helpers ----------------
 
@@ -1169,9 +1734,21 @@
   function heroCard(p, canGive) {
     const scores = p.scores || {};
     const pill = (lbl, v, cls) => h('span', { class: 'pill' + (cls ? ' ' + cls : '') }, h('small', null, lbl), h('b', null, String(v)));
+    const R = RACES[raceOf(p)] || {};
+    const B = BACKGROUNDS[p.background];
     return h('div', { class: 'inv-hero' },
-      h('div', { class: 'who' }, h('b', null, p.name), h('span', null, `${p.cls} · Level ${p.level}`)),
-      !!p.bio && h('p', { class: 'bio' }, p.bio),
+      h('div', { class: 'hero-top' },
+        h('div', { class: 'hero-fig', role: 'img', 'aria-label': `${p.name}, ${raceOf(p)} ${p.cls}${p.alive === false ? ', down' : ''}` },
+          figureOf(p, { view: 'full', size: 190, pose: p.alive === false ? 'down' : 'idle', animate: true })),
+        h('div', { class: 'hero-tx' },
+          h('div', { class: 'who' }, h('b', null, p.name), h('span', null, `${raceOf(p)} ${p.cls} · Level ${p.level}`)),
+          (p.background || p.pronouns) && h('p', { class: 'hint' }, [p.background, p.pronouns].filter(Boolean).join(' · ')),
+          !!p.bio && h('p', { class: 'bio' }, p.bio),
+          !!p.traits && h('p', { class: 'hint trait' }, p.traits),
+          h('div', { class: 'tags' },
+            R.trait && h('span', { class: 'tag warn', title: R.desc || '' }, R.trait),
+            B && h('span', { class: 'tag', title: B.desc }, `${B.skill} +2`),
+            h('span', { class: 'tag', title: 'Squares you can move on your turn in a fight' }, `Move ${speedOf(p)}`)))),
       h('div', { class: 'hero-bars' },
         h('div', null, h('div', { class: 'nums' }, h('span', null, 'HP'), h('span', null, `${p.hp}/${p.maxHp}`)), bar('hp', p.hp, p.maxHp)),
         h('div', null, h('div', { class: 'nums' }, h('span', null, 'MP'), h('span', null, `${p.mana}/${p.maxMana}`)), bar('mp', p.mana, p.maxMana))),
@@ -1181,8 +1758,9 @@
       canGive && givePanel(p),
       h('div', { class: 'scores' }, ABILITY_NAMES.filter((a) => scores[a] != null).map((a) =>
         h('span', { title: ABILITY_FULL[a] || a }, a, h('b', null, String(scores[a])), h('small', null, mod(scores[a]))))),
-      (p.spells || []).length > 0 && h('div', { class: 'tags' }, (p.spells || []).filter((id) => SPELLS[id]).map((id) =>
-        h('span', { class: 'tag', title: SPELLS[id].description || '' }, SPELLS[id].name))));
+      h('div', { class: 'tags' },
+        abilitiesOf(p).map((id) => h('span', { class: 'tag good', title: ABILITIES[id].desc || '' }, ABILITIES[id].name)),
+        (p.spells || []).filter((id) => SPELLS[id]).map((id) => h('span', { class: 'tag', title: SPELLS[id].description || '' }, SPELLS[id].name))));
   }
 
   function dollPanel(p) {
@@ -1207,7 +1785,7 @@
         !!it && !!statLine(it) && h('span', { class: 'slot-st' }, statLine(it))));
     };
     return h('div', { class: 'doll', role: 'group', 'aria-label': 'Equipment' },
-      slotTile('weapon'), h('div', { class: 'doll-fig' }, figure()), slotTile('offhand'), slotTile('armor'), slotTile('trinket'));
+      slotTile('weapon'), slotTile('offhand'), slotTile('armor'), slotTile('trinket'));
   }
 
   function itemTile(p, id, qty, src) {
@@ -1535,8 +2113,8 @@
     const people = others().filter((id) => !!state.players[id].cls);
     const roster = people.map((id) => [id, nameOf(id)]);
     if (p && p.cls && inv.src !== 'shop' && inv.src !== 'sell') checkSelection(p, shopOpen);
-    paint('sheet', $('sheet'), [p, state.stash, shopOpen, inCombat, turn, sel.ally, ui.give, roster, state.phase, inv], () => {
-      if (!p || !p.cls) return h('p', { class: 'hint' }, 'Choose a class and your sheet appears here.');
+    paint('sheet', $('sheet'), [p, state.stash, shopOpen, inCombat, turn, sel.ally, ui.give, roster, state.phase, inv, cfVer()], () => {
+      if (!p || !p.cls) return h('p', { class: 'hint' }, 'Create your character and your sheet appears here.');
       const ctx = { inCombat, turn, shopOpen, people };
       const canGive = !inCombat && people.length > 0;
       return h('div', { class: 'inventory' },
@@ -1664,6 +2242,8 @@
     document.body.classList.toggle('combat', inGame && state.phase === 'combat');
     if (!inGame) {
       if (session && !state) joinNote('Joining…', true);
+      renderTables();
+      if (tablesOn() && !tbl.loading && Date.now() - tbl.at > 10000) loadTables();
       return;
     }
     if (ui.give && state.phase === 'combat') ui.give = null;
@@ -1700,6 +2280,11 @@
     $('audioNote').hidden = hasAudio;
     $('exportBtn').hidden = !canExport();
     $('saveFileBtn').hidden = isArtifact();
+    const o = (state && state.opts) || {};
+    $('tableSet').hidden = !isHost();
+    $('listedRow').hidden = isArtifact();
+    $('listedBox').checked = o.listed !== false;
+    $('lockedBox').checked = !!o.locked;
     const rj = session && session.rejoin;
     $('seatSet').hidden = !rj;
     $('rejoinCode').textContent = rj || '';
@@ -1844,6 +2429,7 @@
     setJoinBusy(false);
     joinNote('');
     netCall('onConn', (ok) => { connOk = !!ok; if (session && state) renderConn(); });
+    loadTables();
     if (isArtifact()) {
       const hint = $('modeHint');
       hint.textContent = 'Playing inside Claude: everyone opens this same page and uses the party code. Friends need a Claude account and access to this page to take a seat.';
@@ -1945,6 +2531,22 @@
   const gesture = () => { if (!gestured) { gestured = true; A.call('unlock'); } };
   ['pointerdown', 'keydown', 'touchstart'].forEach((t) => document.addEventListener(t, gesture, { passive: true }));
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') stopNarration(); });
+
+  ['listedBox', 'lockedBox'].forEach((id) => $(id).addEventListener('change', async (ev) => {
+    const key = id === 'listedBox' ? 'listed' : 'locked';
+    const v = !!ev.target.checked;
+    if (!(await send({ t: 'opts', [key]: v }))) ev.target.checked = !v;
+  }));
+  $('tablesRefresh').addEventListener('click', () => { tbl.at = 0; loadTables(); });
+  // The open tables refresh every 10 s while the join screen shows (and at once when the tab comes back).
+  setInterval(() => { if (document.visibilityState !== 'hidden' && tablesOn()) loadTables(); }, 10000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && tablesOn() && Date.now() - tbl.at > 5000) loadTables(); });
+  // The creator and figures are sized for the window: redraw them when it crosses the phone breakpoint.
+  try {
+    const mq = window.matchMedia('(max-width: 620px)');
+    const again = () => { delete sigs.cc; if (session && state) render(); };
+    if (mq.addEventListener) mq.addEventListener('change', again); else if (mq.addListener) mq.addListener(again);
+  } catch (e) { /* optional */ }
 
   // Once a second: the DM timer, and time-based buttons (nudge, roll for an absent player, skip).
   setInterval(() => {
