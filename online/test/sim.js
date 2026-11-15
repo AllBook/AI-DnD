@@ -63,6 +63,44 @@ function play(adventure, n) {
 
 for (const adv of DM.ADVENTURES) for (const n of [1, 3, 5]) console.log(play(adv.id, n));
 
+// Every class and race can finish an adventure.
+{
+  const races = Object.keys(E.RACES);
+  Object.keys(E.CLASSES).forEach((cls, i) => {
+    const room = E.newRoom('CLS' + i);
+    const team = [cls, 'Cleric', 'Fighter'];
+    team.forEach((c, j) => { must(E.addPlayer(room, 'p' + j, 'Bot' + j)); must(E.act(room, 'p' + j, { t: 'character', cls: c, race: races[(i + j) % races.length], background: Object.keys(E.BACKGROUNDS)[(i + j) % 8] })); });
+    must(E.act(room, 'p0', { t: 'start' })); pump(room);
+    let steps = 0;
+    while (room.story.stage < 6 && steps++ < 3000) {
+      if (room.phase === 'scene') {
+        if (room.dm.check) { must(E.act(room, room.dm.check.pid, { t: 'roll' })); pump(room); continue; }
+        if (!room.scene.rested) must(E.act(room, 'p0', { t: 'rest' }));
+        must(E.act(room, 'p0', { t: 'intent', kind: 'do', text: 'We press on and continue down the road' })); pump(room);
+      } else if (room.phase === 'combat') {
+        const p = room.players[room.combat.turn];
+        const ab = E.abilitiesOf(p).find((id) => !p.cds['a:' + id]);
+        let r = ab ? E.act(room, p.id, { t: 'ability', id: ab }) : { ok: false };
+        if (!r.ok) r = E.act(room, p.id, { t: 'attack' });
+        if (!r.ok) r = E.act(room, p.id, { t: 'endturn' });
+        must(r); pump(room);
+      } else if (room.phase === 'defeat') { must(E.act(room, 'p0', { t: 'regroup' })); pump(room); }
+    }
+    if (room.story.stage < 6) console.log('STUCK', cls, room.phase, room.story.stage, room.combat && room.combat.round, room.combat && JSON.stringify(room.combat.enemies.map((e) => [e.name, e.hp, e.pos])), JSON.stringify(Object.values(room.players).map((q) => [q.cls, q.race, q.hp, q.pos])), room.log.slice(-4).map((e) => e.text).join(' | '));
+    assert.ok(room.story.stage >= 6, cls + ' party did not finish');
+    const p0 = room.players.p0;
+    console.log(`${cls} (${p0.race}, ${p0.background}): finished, level ${p0.level}, HP ${p0.maxHp}, ATK ${E.atkOf(p0)}, spells ${p0.spells.join('/') || '-'}`);
+  });
+  // Validation: point buy and the standard array; racial bonuses; bad input.
+  const room = E.newRoom('CHR'); E.addPlayer(room, 'a', 'A');
+  assert.ok(!E.act(room, 'a', { t: 'character', cls: 'Bard', race: 'Elf', scores: { STR: 15, DEX: 15, CON: 15, INT: 15, WIS: 15, CHA: 15 } }).ok, 'over-budget scores are refused');
+  assert.ok(E.act(room, 'a', { t: 'character', cls: 'Bard', race: 'Elf', background: 'Entertainer', scores: { STR: 8, DEX: 14, CON: 13, INT: 12, WIS: 10, CHA: 15 }, look: { hair: '#b33a2a', hairStyle: 'braid', frame: 'feminine', skin: 'not-a-colour' }, traits: 'Never tells the same story twice.' }).ok);
+  const pa = room.players.a;
+  assert.strictEqual(pa.scores.DEX, 16, 'elf +2 DEX'); assert.strictEqual(pa.scores.INT, 13, 'elf +1 INT');
+  assert.ok(pa.inv.lucky_charm && pa.look.hairStyle === 'braid' && E.LOOK.skin.includes(pa.look.skin), 'background item and clean appearance');
+  assert.ok(!E.act(room, 'a', { t: 'character', cls: 'Necromancer' }).ok);
+}
+
 // ---- rules and anti-cheat ----
 function party() {
   const room = E.newRoom('RULE');

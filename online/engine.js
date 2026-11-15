@@ -35,6 +35,15 @@
     mana_potion: { name: 'Mana Potion', type: 'consumable', description: 'A blue draught that restores 25 mana.', value: 40, equippable: false, slot: null, stats: {}, effects: [{ type: 'mana', value: 25, duration: 0 }] },
     spellbook: { name: 'Spellbook', type: 'tool', description: 'Margins full of frantic notes.', value: 0, equippable: false, slot: null, stats: {}, effects: [] },
     holy_symbol: { name: 'Holy Symbol', type: 'tool', description: 'Worn smooth by prayer.', value: 0, equippable: false, slot: null, stats: {}, effects: [] },
+    greataxe: { name: 'Greataxe', type: 'weapon', description: 'A heavy, wide-bladed axe that rewards a full swing.', value: 30, rarity: 'common', equippable: true, slot: 'weapon', stats: { attack: 6 }, effects: [] },
+    longbow: { name: 'Longbow', type: 'weapon', description: 'Yew and sinew. Lets you hit what you can see.', value: 50, rarity: 'common', equippable: true, slot: 'weapon', stats: { attack: 4 }, ranged: 6, effects: [] },
+    rapier: { name: 'Rapier', type: 'weapon', description: 'A slender duelling blade.', value: 25, rarity: 'common', equippable: true, slot: 'weapon', stats: { attack: 4 }, effects: [] },
+    hand_wraps: { name: 'Hand Wraps', type: 'weapon', description: 'Cloth wraps over hardened knuckles.', value: 2, rarity: 'common', equippable: true, slot: 'weapon', stats: { attack: 3 }, effects: [] },
+    sickle: { name: 'Sickle', type: 'weapon', description: 'A curved blade for harvests of every kind.', value: 3, rarity: 'common', equippable: true, slot: 'weapon', stats: { attack: 2 }, effects: [] },
+    lute: { name: 'Lute', type: 'tool', description: 'Slightly out of tune, which is part of the charm.', value: 35, equippable: false, slot: null, stats: {}, effects: [] },
+    arcane_focus: { name: 'Arcane Focus', type: 'tool', description: 'A crystal that thrums with borrowed power.', value: 10, equippable: false, slot: null, stats: {}, effects: [] },
+    druidic_focus: { name: 'Sprig of Mistletoe', type: 'tool', description: 'Druidic focus, still green.', value: 1, equippable: false, slot: null, stats: {}, effects: [] },
+    pact_tome: { name: 'Pact Tome', type: 'tool', description: 'The handwriting in the margins is not yours.', value: 0, equippable: false, slot: null, stats: {}, effects: [] },
     buckler: { name: 'Buckler', type: 'armor', description: 'A small round shield strapped to the forearm.', value: 15, rarity: 'common', equippable: true, slot: 'offhand', stats: { defense: 1 }, effects: [] },
     shield: { name: 'Shield', type: 'armor', description: 'Oak boards bound in iron, scarred from use.', value: 35, rarity: 'common', equippable: true, slot: 'offhand', stats: { defense: 2 }, effects: [] },
     tower_shield: { name: 'Tower Shield', type: 'armor', description: 'Tall enough to hide behind, heavy enough to regret.', value: 120, rarity: 'uncommon', equippable: true, slot: 'offhand', stats: { defense: 4 }, effects: [] },
@@ -76,13 +85,73 @@
     },
   });
 
+  // Eight more classes (classic tabletop archetypes, adapted to this game's rules).
+  Object.assign(CLASSES, {
+    Barbarian: { hp: 50, atk: 7, def: 1, hpPerLevel: 9, primary: ['STR', 'CON'], speed: 7, scores: { STR: 15, DEX: 13, CON: 14, INT: 8, WIS: 12, CHA: 10 }, gear: { greataxe: 1, leather_armor: 1 }, equip: ['greataxe', 'leather_armor'], abilities: ['reckless_attack'], spells: [], learn: {}, blurb: 'Rage-fuelled and nearly unkillable. Reckless swings hit hardest of all.' },
+    Paladin: { hp: 44, atk: 6, def: 2, hpPerLevel: 8, primary: ['STR', 'CHA'], scores: { STR: 15, DEX: 10, CON: 13, INT: 8, WIS: 12, CHA: 14 }, gear: { longsword: 1, chainmail: 1, buckler: 1 }, equip: ['longsword', 'chainmail', 'buckler'], abilities: ['divine_smite'], spells: ['heal'], learn: { 3: 'divine_shield' }, blurb: 'Armoured champion of an oath. Smites evil and patches up friends.' },
+    Ranger: { hp: 38, atk: 6, def: 1, hpPerLevel: 7, primary: ['DEX', 'WIS'], scores: { STR: 10, DEX: 15, CON: 13, INT: 8, WIS: 14, CHA: 12 }, gear: { longbow: 1, dagger: 1, leather_armor: 1 }, equip: ['longbow', 'leather_armor'], abilities: ['volley'], spells: ['entangle'], learn: { 3: 'rejuvenation' }, blurb: 'Hunter and tracker. Shoots from six squares away and pins foes in place.' },
+    Bard: { hp: 32, atk: 4, def: 1, hpPerLevel: 6, primary: ['CHA', 'DEX'], scores: { STR: 8, DEX: 14, CON: 12, INT: 13, WIS: 10, CHA: 15 }, gear: { rapier: 1, lute: 1, leather_armor: 1, health_potion: 1 }, equip: ['rapier', 'leather_armor'], abilities: ['inspire'], spells: ['heal', 'curse_of_weakness'], learn: { 3: 'magic_missile' }, blurb: 'Silver tongue, quick blade. Inspires allies and talks past trouble.' },
+    Warlock: { hp: 32, atk: 4, def: 1, hpPerLevel: 6, primary: ['CHA', 'CON'], scores: { STR: 8, DEX: 13, CON: 14, INT: 12, WIS: 10, CHA: 15 }, gear: { dagger: 1, pact_tome: 1, leather_armor: 1 }, equip: ['dagger', 'leather_armor'], abilities: ['eldritch_blast'], spells: ['shadow_bolt', 'curse_of_weakness'], learn: { 3: 'life_drain' }, blurb: 'Power bought from something old. Eldritch blasts from across the room.' },
+    Druid: { hp: 34, atk: 4, def: 1, hpPerLevel: 6, primary: ['WIS', 'CON'], scores: { STR: 10, DEX: 12, CON: 14, INT: 13, WIS: 15, CHA: 8 }, gear: { sickle: 1, druidic_focus: 1, leather_armor: 1, health_potion: 1 }, equip: ['sickle', 'leather_armor'], abilities: ['thorn_whip'], spells: ['entangle', 'rejuvenation'], learn: { 3: 'heal', 5: 'summon_bear' }, blurb: 'Keeper of wild places. Roots, thorns and healing green magic.' },
+    Monk: { hp: 36, atk: 6, def: 3, hpPerLevel: 7, primary: ['DEX', 'WIS'], speed: 8, scores: { STR: 10, DEX: 15, CON: 13, INT: 8, WIS: 14, CHA: 12 }, gear: { hand_wraps: 1 }, equip: ['hand_wraps'], abilities: ['flurry'], spells: [], learn: {}, blurb: 'Fast and unarmoured. Moves eight squares and strikes twice.' },
+    Sorcerer: { hp: 28, atk: 4, def: 1, hpPerLevel: 5, primary: ['CHA', 'CON'], scores: { STR: 8, DEX: 13, CON: 14, INT: 12, WIS: 10, CHA: 15 }, gear: { dagger: 1, arcane_focus: 1, mana_potion: 2 }, equip: ['dagger'], abilities: ['chaos_bolt'], spells: ['ice_bolt', 'lightning_bolt'], learn: { 3: 'chain_lightning', 5: 'thunderstorm' }, blurb: 'Magic in the blood, wild and strong. Raw arcane fire with little armour.' },
+  });
+  Object.assign(CLASSES.Fighter, { primary: ['STR', 'CON'] });
+  Object.assign(CLASSES.Wizard, { primary: ['INT', 'WIS'] });
+  Object.assign(CLASSES.Rogue, { primary: ['DEX', 'CHA'], speed: 7 });
+  Object.assign(CLASSES.Cleric, { primary: ['WIS', 'STR'] });
+
+  const RACES = table({
+    Human: { bonus: { STR: 1, DEX: 1, CON: 1, INT: 1, WIS: 1, CHA: 1 }, trait: 'Versatile', desc: '+1 to every ability score.' },
+    Elf: { bonus: { DEX: 2, INT: 1 }, trait: 'Keen Senses', desc: 'Advantage on Wisdom checks; sees well in the dark.' },
+    Dwarf: { bonus: { CON: 2, STR: 1 }, trait: 'Dwarven Toughness', desc: '+1 hit point per level and +1 defense.' },
+    Halfling: { bonus: { DEX: 2, CHA: 1 }, trait: 'Lucky', desc: 'Re-roll any natural 1 on a check.' },
+    'Half-Orc': { bonus: { STR: 2, CON: 1 }, trait: 'Relentless Endurance', desc: 'Once per fight, drop to 1 HP instead of falling.' },
+    Tiefling: { bonus: { CHA: 2, INT: 1 }, trait: 'Infernal Legacy', desc: 'Your damaging spells deal +2 damage.' },
+    Dragonborn: { bonus: { STR: 2, CHA: 1 }, trait: 'Breath Weapon', desc: 'Breathe fire on everything within 2 squares once per fight.' },
+    Gnome: { bonus: { INT: 2, DEX: 1 }, trait: 'Gnome Cunning', desc: 'Advantage on Intelligence, Wisdom and Charisma checks.' },
+  });
+  const BACKGROUNDS = table({
+    Soldier: { skill: 'STR', item: 'rope', gold: 10, desc: 'You served in a company. Strength checks +2.' },
+    Acolyte: { skill: 'WIS', item: 'holy_symbol', gold: 15, desc: 'Raised in a temple. Wisdom checks +2.' },
+    Criminal: { skill: 'DEX', item: 'lockpicks', gold: 15, desc: 'You know the underside of every city. Dexterity checks +2.' },
+    Sage: { skill: 'INT', item: 'spellbook', gold: 10, desc: 'Years among books. Intelligence checks +2.' },
+    'Folk Hero': { skill: 'CON', item: 'torch', gold: 10, desc: 'The people of your village still sing about you. Constitution checks +2.' },
+    Noble: { skill: 'CHA', item: 'ruby', gold: 25, desc: 'Born to privilege and expected to use it. Charisma checks +2.' },
+    Outlander: { skill: 'WIS', item: 'rope', gold: 5, desc: 'You grew up far from roads. Wisdom checks +2.' },
+    Entertainer: { skill: 'CHA', item: 'lucky_charm', gold: 15, desc: 'You know how to hold a room. Charisma checks +2.' },
+  });
+  const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
+  const POINT_COST = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
+  const LOOK = {
+    body: ['slender', 'average', 'broad'], frame: ['feminine', 'masculine', 'neutral'],
+    skin: ['#f3d2b5', '#e0ac85', '#c68a5c', '#9c6440', '#6e4428', '#47301f', '#9fb8a4', '#8fa6c9', '#b56a5a', '#c9b3d9'],
+    hair: ['#141011', '#3b2a1e', '#6b4226', '#a0682f', '#d4a556', '#e8d7a8', '#b33a2a', '#9aa0a6', '#f2f2f2', '#3d6ea8', '#5c8f4a', '#7a3f8c'],
+    hairStyle: ['bald', 'short', 'cropped', 'long', 'braid', 'topknot', 'mohawk', 'curly', 'ponytail', 'hood'],
+    beard: ['none', 'stubble', 'short', 'long', 'braided'],
+    eyes: ['#3b2a1e', '#2f6fa3', '#4f8a3e', '#8a6a2e', '#9aa0a6', '#c0392b', '#d4a017', '#7d3c98'],
+    outfit: ['#7a2e2e', '#2e4a7a', '#2e6a4a', '#6a5a2e', '#4a2e6a', '#3a3a3a', '#8a6a3e', '#c9c2b0'],
+    accent: ['#d1a94f', '#c0c0c0', '#b87333', '#2f2f2f', '#e8e0d0'],
+    mark: ['none', 'scar', 'tattoo', 'freckles', 'warpaint', 'horns-small', 'eyepatch'],
+  };
+
   const ABILITIES = table({
     heavy_strike: { name: 'Heavy Strike', cd: 2, target: 'enemy', desc: 'Strike for double your attack.' },
     fireball: { name: 'Fireball', cd: 3, target: 'enemy', desc: 'Hurl fire for 15–20 damage. Costs no mana.' },
     backstab: { name: 'Backstab', cd: 2, target: 'enemy', desc: 'Cut 2 defense off the target, then hit for 150%.' },
     cheap_shot: { name: 'Cheap Shot', cd: 2, target: 'enemy', desc: 'Hit for 120% with a 30% chance to stun.' },
     heal: { name: 'Heal', cd: 1, target: 'ally', desc: 'Restore 1–20 HP to an ally. Costs no mana.' },
+    reckless_attack: { name: 'Reckless Attack', cd: 2, target: 'enemy', desc: 'Hit for 220% of your attack, but drop your guard (−2 DEF) until your next turn.' },
+    divine_smite: { name: 'Divine Smite', cd: 2, target: 'enemy', desc: 'A blow wreathed in radiance: your attack plus 2d8.' },
+    volley: { name: 'Volley', cd: 2, target: 'enemy', range: 6, desc: 'Arrows at your target and every enemy beside it.' },
+    inspire: { name: 'Inspire', cd: 2, target: 'ally', range: 6, desc: 'A rousing verse: an ally gains +3 attack for 3 turns and 5 HP.' },
+    eldritch_blast: { name: 'Eldritch Blast', cd: 1, target: 'enemy', range: 8, desc: 'A crackling beam for 9–14 force damage. Costs no mana.' },
+    thorn_whip: { name: 'Thorn Whip', cd: 1, target: 'enemy', range: 3, desc: 'A vine lash for 7–11 damage that slows the target.' },
+    flurry: { name: 'Flurry of Blows', cd: 1, target: 'enemy', desc: 'Two quick strikes at 80% of your attack each.' },
+    chaos_bolt: { name: 'Chaos Bolt', cd: 2, target: 'enemy', range: 8, desc: 'Wild magic for 8–20 damage. Costs no mana.' },
+    breath_weapon: { name: 'Breath Weapon', cd: 99, target: 'enemy', range: 2, desc: 'Dragonborn: fire on every enemy within 2 squares, 3d6. Once per fight.' },
   });
+  const abilitiesOf = (p) => (CLASSES[p.cls] ? CLASSES[p.cls].abilities : []).concat(p.race === 'Dragonborn' ? ['breath_weapon'] : []);
 
   const MONSTERS = table({
     Goblin: { hp: [18, 26], atk: [6, 8], def: 1, xp: 20, ability: 'fury', loot: 'goblin' },
@@ -139,6 +208,7 @@
   function addPlayer(room, id, name) {
     if (own(room.players, id)) { room.players[id].online = true; return { ok: true }; }
     if (room.order.length >= MAX_PLAYERS) return { ok: false, error: `This party is full (${MAX_PLAYERS} adventurers).` };
+    if (room.opts && room.opts.locked) return { ok: false, error: 'The host has closed this table to new players.' };
     name = clean(name, 20) || 'Adventurer';
     const taken = new Set(room.order.map((pid) => room.players[pid].name.toLowerCase()));
     let n = name, i = 2;
@@ -175,21 +245,57 @@
     }
   }
 
-  function setClass(room, p, cls, bio) {
+  /** Validate ability scores: the standard array in any order, or a 27-point buy (8 to 15). */
+  function checkScores(raw, fallback) {
+    if (!raw || typeof raw !== 'object') return { scores: Object.assign({}, fallback) };
+    const sc = {};
+    for (const k of ABILITY_NAMES) { const v = Math.floor(Number(raw[k])); if (!(v >= 8 && v <= 15)) return { error: 'Ability scores must be between 8 and 15 before racial bonuses.' }; sc[k] = v; }
+    const sorted = ABILITY_NAMES.map((k) => sc[k]).sort((a, b) => b - a);
+    const isArray = sorted.every((v, i) => v === STANDARD_ARRAY[i]);
+    const cost = ABILITY_NAMES.reduce((t, k) => t + POINT_COST[sc[k]], 0);
+    if (!isArray && cost > 27) return { error: `That spends ${cost} points; you have 27.` };
+    return { scores: sc };
+  }
+  function cleanLook(raw) {
+    const out = {};
+    const r = raw && typeof raw === 'object' ? raw : {};
+    for (const k in LOOK) out[k] = LOOK[k].includes(r[k]) ? r[k] : LOOK[k][k === 'skin' ? 1 : k === 'frame' ? 2 : k === 'hairStyle' ? 1 : k === 'body' ? 1 : 0];
+    return out;
+  }
+
+  function setClass(room, p, cls, bio, ch) {
     if (!own(CLASSES, cls)) return 'Unknown class.';
-    if (p.cls && room.phase !== 'lobby') return 'Your class is already chosen.';
+    if (p.cls && room.phase !== 'lobby') return 'Your character is already made.';
+    ch = ch && typeof ch === 'object' ? ch : {};
+    const race = own(RACES, ch.race) ? ch.race : (p.race && own(RACES, p.race) ? p.race : 'Human');
+    const bg = own(BACKGROUNDS, ch.background) ? ch.background : (p.background && own(BACKGROUNDS, p.background) ? p.background : 'Folk Hero');
     const c = CLASSES[cls];
+    const sc = checkScores(ch.scores, c.scores);
+    if (sc.error) return sc.error;
     p.cls = cls;
-    if (bio != null) p.bio = clean(bio, 140);
-    p.scores = Object.assign({}, c.scores);
-    p.maxHp = p.hp = c.hp;
-    p.atk = c.atk; p.def = c.def;
-    p.maxMana = p.mana = 50 + Math.max(abilityMod(c.scores.INT), abilityMod(c.scores.WIS)) * 10;
+    p.race = race;
+    p.background = bg;
+    p.look = cleanLook(ch.look || p.look);
+    if (bio != null) p.bio = clean(bio, 160);
+    if (ch.traits != null) p.traits = clean(ch.traits, 160);
+    if (ch.pronouns != null) p.pronouns = clean(ch.pronouns, 20);
+    p.base = Object.assign({}, sc.scores);
+    p.scores = {};
+    for (const k of ABILITY_NAMES) p.scores[k] = Math.min(20, p.base[k] + (RACES[race].bonus[k] || 0));
+    const mod = (k) => abilityMod(p.scores[k]);
+    const prime = c.primary ? c.primary[0] : 'STR';
+    p.maxHp = p.hp = c.hp + 2 * mod('CON') + (race === 'Dwarf' ? 1 : 0);
+    p.atk = Math.max(2, c.atk + mod(prime) - 2);
+    p.def = c.def + (race === 'Dwarf' ? 1 : 0);
+    p.maxMana = p.mana = 50 + Math.max(mod('INT'), mod('WIS'), mod('CHA')) * 10;
     p.inv = Object.assign({}, c.gear);
+    const bgi = BACKGROUNDS[bg].item;
+    if (bgi && own(ITEMS, bgi)) p.inv[bgi] = (p.inv[bgi] || 0) + 1;
     p.eq = { weapon: null, armor: null, offhand: null, trinket: null };
     c.equip.forEach((it) => { p.eq[ITEMS[it].slot] = it; });
-    p.gold = rnd(10, 50);
-    p.spells = (own(DATA.startingSpells, cls) ? DATA.startingSpells[cls] : []).slice();
+    p.gold = rnd(10, 40) + BACKGROUNDS[bg].gold;
+    p.spells = (c.spells || (own(DATA.startingSpells, cls) ? DATA.startingSpells[cls] : [])).filter((id) => own(SPELLS, id));
+    p.used = {};
     p.cds = {}; p.fx = []; p.alive = true; p.level = 1; p.xp = 0;
     if (room.phase === 'combat' && room.combat && !room.combat.order.includes(p.id)) room.combat.order.push(p.id);
     return null;
@@ -212,13 +318,14 @@
     return s;
   }
   const atkOf = (c) => Math.max(1, c.atk + gearStat(c, 'attack') + fxSum(c, 'str') - fxSum(c, 'weak') - fxSum(c, 'slow'));
-  const defOf = (c) => Math.max(0, c.def + gearStat(c, 'defense') + fxSum(c, 'guard'));
+  const defOf = (c) => Math.max(0, c.def + gearStat(c, 'defense') + fxSum(c, 'guard') - fxSum(c, 'exposed'));
 
   /** Apply raw damage through defense, as Character.take_damage does. */
   function hit(target, raw) {
     if (hasFx(target, 'invuln')) return 0;
     const dmg = Math.max(1, Math.round(raw) - defOf(target));
     target.hp = Math.max(0, target.hp - dmg);
+    if (target.hp <= 0 && target.race === 'Half-Orc' && target.used && !target.used.relentless) { target.used.relentless = 1; target.hp = 1; }
     if (target.hp <= 0) target.alive = false;
     return dmg;
   }
@@ -236,9 +343,9 @@
 
   // ---------- the tabletop map ----------
 
-  const SPEED = { Fighter: 6, Wizard: 6, Rogue: 7, Cleric: 6 };
+  const SPEED = {};
   const ESPEED = { Goblin: 6, Wolf: 8, Bandit: 6, Cultist: 6, Skeleton: 5, Spider: 6, Orc: 6, Wraith: 6, Ogre: 5, Boss: 5 };
-  const speedOf = (p) => (p && SPEED[p.cls]) || 6;
+  const speedOf = (p) => (p && CLASSES[p.cls] && CLASSES[p.cls].speed) || 6;
   const K = (pos) => Maps.key(pos.x, pos.y);
 
   function layoutFor(room, wanted) { return Maps.LAYOUTS.includes(wanted) ? wanted : (Maps.FROM_AMBIENCE[room.scene.ambience] || 'dungeon'); }
@@ -246,7 +353,8 @@
   /** Squares nobody else may end a move on (and enemies and props cannot be walked through). */
   function blockers(room, exceptId) {
     const all = new Set(), hard = new Set();
-    players(room).forEach((p) => { if (p.pos && p.id !== exceptId) all.add(K(p.pos)); });
+    // Fallen heroes do not block a square (anyone can step over them).
+    players(room).forEach((p) => { if (p.pos && p.id !== exceptId && p.alive) all.add(K(p.pos)); });
     livingEnemies(room).forEach((e) => { if (e.pos && e.id !== exceptId) { all.add(K(e.pos)); hard.add(K(e.pos)); } });
     // Characters in the scene can be squeezed past; chests cannot.
     if (room.map) room.map.objects.forEach((o) => { if (o.kind === 'npc' || o.kind === 'chest') all.add(Maps.key(o.x, o.y)); if (o.kind === 'chest') hard.add(Maps.key(o.x, o.y)); });
@@ -312,7 +420,8 @@
   /** Squares of reach for an action (1 = melee). Distance is counted as in D&D 5e: diagonals count 1. */
   function rangeOf(room, pid, a) {
     if (!a) return 1;
-    if (a.t === 'ability') return a.id === 'fireball' ? 8 : 1;
+    if (a.t === 'ability') return a.id === 'fireball' ? 8 : own(ABILITIES, a.id) && ABILITIES[a.id].range ? ABILITIES[a.id].range : 1;
+    if (a.t === 'attack') { const p = room.players[pid]; const w = p && p.eq && p.eq.weapon && ITEMS[p.eq.weapon]; return (w && w.ranged) || 1; }
     if (a.t === 'spell') {
       const s = own(SPELLS, a.id) ? SPELLS[a.id] : null;
       if (!s) return 1;
@@ -530,7 +639,7 @@
     room.combat = Object.assign({ enemies, order, turn: null, round: 1, left: 0, acted: false }, extra || {});
     room.dm.check = null;
     room.dm.queue = room.dm.queue.filter((q) => q.kind !== 'do' && q.kind !== 'say');
-    players(room).forEach((x) => { x.cds = {}; x.fx = x.fx.filter((f) => f.k === 'str'); });
+    players(room).forEach((x) => { x.cds = {}; x.fx = x.fx.filter((f) => f.k === 'str'); x.used = {}; });
     say(room, 'sys', `Battle! ${enemies.map((x) => x.name).join(', ')}.`);
     beginTurn(room, order[0]);
     return true;
@@ -725,7 +834,7 @@
     const cdKey = 's:' + action.id;
     if (p.mana < s.mana_cost) return `Not enough mana. ${s.name} needs ${s.mana_cost}.`;
     if (p.cds[cdKey]) return `${s.name} is on cooldown for ${p.cds[cdKey]} more turn(s).`;
-    const bonus = abilityMod(p.scores.INT) + gearStat(p, 'magic_damage');
+    const bonus = Math.max(abilityMod(p.scores.INT), abilityMod(p.scores.CHA), abilityMod(p.scores.WIS)) + gearStat(p, 'magic_damage') + (p.race === 'Tiefling' ? 2 : 0);
     if (s.spell_type === 'Damage') {
       if (!room.combat) return 'There is nothing to attack.';
       const primary = findTarget(room, action, 'enemy');
@@ -776,10 +885,15 @@
   }
 
   function abilityCheck(p, ability) {
-    const roll = d(20);
-    const top = Object.keys(p.scores).sort((a, b) => p.scores[b] - p.scores[a]).slice(0, 2);
-    const m = abilityMod(p.scores[ability]) + (top.includes(ability) ? 2 : 0);
-    return { roll, mod: m, total: roll + m };
+    let roll = d(20);
+    const adv = (p.race === 'Elf' && ability === 'WIS') || (p.race === 'Gnome' && ['INT', 'WIS', 'CHA'].includes(ability));
+    if (adv) roll = Math.max(roll, d(20));
+    if (roll === 1 && p.race === 'Halfling') roll = d(20);
+    const c = CLASSES[p.cls];
+    const prof = c && c.primary ? c.primary : Object.keys(p.scores).sort((a, b) => p.scores[b] - p.scores[a]).slice(0, 2);
+    const bg = p.background && BACKGROUNDS[p.background];
+    const m = abilityMod(p.scores[ability]) + (prof.includes(ability) ? 2 : 0) + (bg && bg.skill === ability ? 2 : 0);
+    return { roll, mod: m, total: roll + m, adv };
   }
   const checkText = (c, ability, dc) => `${ability} check: d20 (${c.roll}) ${c.mod >= 0 ? '+' : '−'} ${Math.abs(c.mod)} = ${c.total} vs DC ${dc}`;
 
@@ -790,7 +904,7 @@
     if (a.t === 'endturn') { say(room, 'act', `${p.name} ends their turn.`); tickFx(p); advance(room); return null; }
     if (room.map && p.pos) {
       let tgt = null;
-      const friendly = (a.t === 'ability' && a.id === 'heal') || (a.t === 'spell' && own(SPELLS, a.id) && ['Heal', 'Buff'].includes(SPELLS[a.id].spell_type)) || a.t === 'use';
+      const friendly = (a.t === 'ability' && own(ABILITIES, a.id) && ABILITIES[a.id].target === 'ally') || (a.t === 'spell' && own(SPELLS, a.id) && ['Heal', 'Buff'].includes(SPELLS[a.id].spell_type)) || a.t === 'use';
       if (['attack', 'ability', 'spell', 'attempt', 'use'].includes(a.t)) tgt = friendly ? findTarget(room, a, 'ally') : findTarget(room, a, 'enemy');
       if (tgt && tgt !== p && tgt.pos) {
         const err = approach(room, p, tgt.pos, a.t === 'use' ? 1 : rangeOf(room, p.id, a), tgt.name);
@@ -802,11 +916,17 @@
       const roll = d(6);
       strike(room, p, e, atkOf(p) + roll, `${p.name} attacks ${e.name} (d6: ${roll}) for {d} damage.`);
     } else if (a.t === 'ability') {
-      if (!own(ABILITIES, a.id) || !CLASSES[p.cls].abilities.includes(a.id)) return 'You do not have that ability.';
+      if (!own(ABILITIES, a.id) || !abilitiesOf(p).includes(a.id)) return 'You do not have that ability.';
+      if (a.id === 'breath_weapon' && p.used && p.used.breath) return 'You have used your breath weapon this fight.';
       const ab = ABILITIES[a.id];
       const cdKey = 'a:' + a.id;
       if (p.cds[cdKey]) return `${ab.name} is ready in ${p.cds[cdKey]} turn(s).`;
-      if (a.id === 'heal') {
+      if (a.id === 'inspire') {
+        const t = findTarget(room, a, 'ally') || p;
+        if (!t.alive) return `${t.name} is down.`;
+        addFx(t, 'str', 3, 4);
+        say(room, 'act', `${p.name} sings a rousing verse: ${t.id === p.id ? 'they feel' : t.name + ' feels'} unstoppable (+3 attack, ${heal(t, 5)} HP).`, { healed: t.id });
+      } else if (a.id === 'heal') {
         const t = findTarget(room, a, 'ally') || p;
         if (!t.alive) return `${t.name} is down. Only Resurrection can help now.`;
         say(room, 'act', `${p.name} lays on hands and heals ${t.id === p.id ? 'themself' : t.name} for ${heal(t, d(20))} HP.`, { healed: t.id });
@@ -814,7 +934,21 @@
         const e = findTarget(room, a, 'enemy');
         if (a.id === 'heavy_strike') strike(room, p, e, atkOf(p) * 2, `${p.name} brings down a Heavy Strike on ${e.name} for {d} damage.`);
         else if (a.id === 'fireball') strike(room, p, e, rnd(15, 20), `${p.name} hurls a Fireball at ${e.name} for {d} damage.`);
-        else if (a.id === 'backstab') { e.def = Math.max(0, e.def - 2); strike(room, p, e, atkOf(p) * 1.5, `${p.name} slips behind ${e.name} and Backstabs for {d} damage (defense −2).`); } else if (a.id === 'cheap_shot') {
+        else if (a.id === 'reckless_attack') { strike(room, p, e, atkOf(p) * 2.2, `${p.name} swings recklessly at ${e.name} for {d} damage, leaving an opening.`); addFx(p, 'exposed', 2, 2); }
+        else if (a.id === 'divine_smite') { const extra = d(8) + d(8); strike(room, p, e, atkOf(p) + extra, `${p.name}'s weapon blazes with holy light: a Divine Smite on ${e.name} for {d} damage.`); }
+        else if (a.id === 'volley') {
+          const near = livingEnemies(room).filter((x) => x === e || (x.pos && e.pos && Maps.dist(x.pos, e.pos) <= 1));
+          near.forEach((x) => { if (x.alive) strike(room, p, x, atkOf(p) * 0.9, `${p.name}'s arrow takes ${x.name} for {d} damage.`); });
+        } else if (a.id === 'eldritch_blast') strike(room, p, e, rnd(9, 14) + Math.max(0, abilityMod(p.scores.CHA)), `${p.name} hurls an Eldritch Blast at ${e.name} for {d} force damage.`);
+        else if (a.id === 'thorn_whip') { strike(room, p, e, rnd(7, 11), `A thorned vine lashes ${e.name} for {d} damage.`); if (e.alive) addFx(e, 'slow', 3, 2); }
+        else if (a.id === 'flurry') { strike(room, p, e, atkOf(p) * 0.8, `${p.name} strikes ${e.name} for {d}`); if (e.alive) strike(room, p, e, atkOf(p) * 0.8, `${p.name} follows with a second blow for {d} damage.`); }
+        else if (a.id === 'chaos_bolt') strike(room, p, e, rnd(8, 20) + (p.race === 'Tiefling' ? 2 : 0), `${p.name} looses a Chaos Bolt; it twists through the air and hits ${e.name} for {d} damage.`);
+        else if (a.id === 'breath_weapon') {
+          p.used = p.used || {}; p.used.breath = 1;
+          const hitList = livingEnemies(room).filter((x) => !x.pos || !p.pos || Maps.dist(x.pos, p.pos) <= 2);
+          hitList.forEach((x) => strike(room, p, x, d(6) + d(6) + d(6) + 4, `${p.name} breathes fire over ${x.name} for {d} damage.`));
+          if (!hitList.length) say(room, 'act', `${p.name} breathes a gout of fire that catches nothing.`);
+        } else if (a.id === 'backstab') { e.def = Math.max(0, e.def - 2); strike(room, p, e, atkOf(p) * 1.5, `${p.name} slips behind ${e.name} and Backstabs for {d} damage (defense −2).`); } else if (a.id === 'cheap_shot') {
           const stun = Math.random() < 0.3;
           strike(room, p, e, atkOf(p) * 1.2, `${p.name} lands a Cheap Shot on ${e.name} for {d} damage${stun ? ' — stunned!' : '.'}`);
           if (stun && e.alive) addFx(e, 'stun', 0, 1);
@@ -926,8 +1060,11 @@
       if (!text) return fail('Say something first.');
       say(room, 'chat', text, { who: p.name });
     } else if (a.t === 'class') {
-      err = setClass(room, p, a.cls, a.bio);
-      if (!err) say(room, 'sys', `${p.name} takes up the mantle of the ${p.cls}.`);
+      err = setClass(room, p, a.cls, a.bio, a);
+      if (!err) say(room, 'sys', `${p.name} the ${p.race} ${p.cls} (${p.background}) is ready.`);
+    } else if (a.t === 'character') {
+      err = setClass(room, p, a.cls, a.bio, a);
+      if (!err) say(room, 'sys', `${p.name} the ${p.race} ${p.cls} (${p.background}) is ready.`);
     } else if (a.t === 'opts') {
       if (!isHost) err = 'Only the host can change the adventure settings.';
       else {
@@ -941,6 +1078,8 @@
         }
         if (TONES.includes(a.tone)) room.opts.tone = a.tone;
         if (DIFFS.includes(a.difficulty)) room.opts.difficulty = a.difficulty;
+        if (typeof a.listed === 'boolean') room.opts.listed = a.listed;
+        if (typeof a.locked === 'boolean') room.opts.locked = a.locked;
         if (a.lang != null) room.opts.lang = clean(a.lang, 24).replace(/[^\p{L} -]/gu, '') || 'English';
       }
     } else if (a.t === 'equip') {
@@ -1096,7 +1235,7 @@
       opts: room.opts, mode: room.phase === 'combat' ? 'combat' : 'story',
       scene: { location: room.scene.location, ambience: room.scene.ambience, shop: room.scene.shop },
       party: players(room).map((p) => ({
-        name: p.name, class: p.cls, level: p.level, hp: `${p.hp}/${p.maxHp}`, gold: p.gold, down: !p.alive,
+        name: p.name, race: p.race, class: p.cls, background: p.background, pronouns: p.pronouns || undefined, personality: p.traits || undefined, level: p.level, hp: `${p.hp}/${p.maxHp}`, gold: p.gold, down: !p.alive,
         concept: p.bio || undefined, items: Object.keys(p.inv).map((id) => (ITEMS[id] ? ITEMS[id].name : id)), keepsakes: p.keep,
       })),
       combat: room.combat ? { round: room.combat.round, enemies: livingEnemies(room).map((e) => e.name), acting: (room.players[room.combat.turn] || {}).name } : null,
@@ -1379,7 +1518,7 @@
 
   return {
     ITEMS, SPELLS, CLASSES, ABILITIES, MONSTERS, SHOP, ABILITY_NAMES, ADVENTURES, MAX_PLAYERS, IDLE_SKIP_MS, CHECK_TIMEOUT_MS, DM_STALE_MS,
-    SLOTS, CAPACITY, sellPrice,
+    SLOTS, CAPACITY, sellPrice, RACES, BACKGROUNDS, LOOK, STANDARD_ARRAY, POINT_COST, abilitiesOf,
     newRoom, addPlayer, act, atkOf, defOf, locationOf, dmNeeded, dmBegin, dmApply, dmFallback, dmView,
     LAYOUTS: Maps.LAYOUTS, walkable: Maps.walkable, pathTo, reachable, rangeOf, speedOf, dist: Maps.dist,
   };

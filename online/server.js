@@ -317,6 +317,31 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, out);
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/tables') {
+      // The lobby: parties whose host lets them be listed, newest activity first.
+      const now = Date.now();
+      const list = [];
+      let playing = 0;
+      for (const [code, e] of rooms) {
+        const r = e.room;
+        const online = new Set([...e.clients].map((c) => c.pid));
+        playing += online.size;
+        if (r.opts.listed === false || !r.order.length || now - r.updated > 3 * 86400000) continue;
+        const adv = DM.adventure(r.opts.adventure);
+        const ps = r.order.map((id) => r.players[id]).filter(Boolean);
+        list.push({
+          code, title: r.opts.adventure === 'custom' && r.opts.premise ? r.opts.premise.slice(0, 80) : adv.title,
+          host: (r.players[r.host] || {}).name || '', phase: r.phase, location: r.phase === 'lobby' ? 'Gathering in the lobby' : r.scene.location,
+          tone: r.opts.tone, difficulty: r.opts.difficulty, lang: r.opts.lang, locked: !!r.opts.locked,
+          seats: Engine.MAX_PLAYERS - ps.length, online: online.size, updated: r.updated, beats: r.story.beats,
+          players: ps.map((p) => ({ name: p.name, cls: p.cls, race: p.race || '', level: p.level, online: online.has(p.id), look: p.look || null })),
+        });
+      }
+      list.sort((a, b) => (b.online - a.online) || (b.updated - a.updated));
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      return res.end(JSON.stringify({ tables: list.slice(0, 50), playing, parties: rooms.size }));
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/create') {
       const body = await readJson(req);
       if (rooms.size >= MAX_ROOMS) return send(res, 503, { error: 'The server is full. Try again later.' });
