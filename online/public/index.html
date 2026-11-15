@@ -49,6 +49,7 @@
           <h2 id="locName"></h2>
           <span class="chip amb" id="ambChip"></span>
         </div>
+        <button class="shop-mark" id="shopMark" type="button" hidden aria-label="A merchant is here. Trade with the merchant"><span aria-hidden="true">&#9878;</span> Merchant</button>
         <div class="foes" id="foes"></div>
       </section>
 
@@ -74,6 +75,7 @@
         </section>
       </div>
       <section class="composer" id="composer">
+        <button type="button" class="trade-cta" id="tradeCta" hidden>Trade with the merchant <small>buy and sell</small></button>
         <div class="chips" id="chips" aria-label="Suggested actions"></div>
         <div class="modes" id="modes" role="radiogroup" aria-label="Message type">
           <button type="button" role="radio" data-mode="do" aria-checked="true">Do</button>
@@ -169,6 +171,15 @@
         <button type="button" data-close>Stay</button>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="tradeDlg" class="trade-dlg" aria-labelledby="tradeTitle">
+    <div class="dlg-head">
+      <h2 id="tradeTitle">Trade with the merchant</h2>
+      <span class="trade-gold" id="tradeGold" aria-live="polite"></span>
+      <button class="ghost" type="button" data-close>Close</button>
+    </div>
+    <div class="dlg-body"><div class="inventory" id="tradeBody"></div></div>
   </dialog>
 
   <div class="toast" id="toast" role="status" hidden></div>

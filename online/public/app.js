@@ -754,7 +754,7 @@
         const heals = (p.spells || []).filter((id) => SPELLS[id] && SPELLS[id].spell_type === 'Heal');
         kids.push(h('div', { class: 'btns qa' },
           btn('Rest', sc.rested ? 'already rested here' : 'once per location', { t: 'rest' }, { disabled: !!sc.rested }),
-          !!sc.shop && btn('Trade', `merchant · ${p.gold} gold`, () => openPack('tradeBox'), { k: 'trade-open' }),
+          !!sc.shop && btn('Trade with the merchant', `${p.gold} gold`, openTrade, { cls: 'primary', k: 'trade-open' }),
           heals.map((id) => spellBtn(p, id)),
           others().some((id) => !!state.players[id].cls) && btn('Give…', 'item or gold', () => { ui.give = ui.give || { what: 'gold' }; openPack('sheetBox'); }),
           btn('Recap', 'the story so far', { t: 'recap' }),
@@ -835,8 +835,10 @@
       h('button', { type: 'button', class: 'chipbtn', 'data-k': 'chip-' + i, title: 'Do this', onclick: () => sendChip(text) }, text)));
   }
 
+  const TRADE_WORDS = /\b(buy|buying|bought|sell|selling|trade|trading|wares|shop|shopping|purchase|haggle|barter|merchant|goods|stock)\b/i;
   async function sendChip(text) {
     if (busy) return;
+    if (shopNow() && TRADE_WORDS.test(text)) openTrade();
     const okSent = await send({ t: 'intent', kind: 'do', text });
     if (okSent) { A.call('sfx', 'send'); sayNote(''); }
   }
@@ -872,12 +874,16 @@
       if (cmd === 'help') { ta.value = ''; growSay(); sayNote(''); openDlg('helpDlg'); return; }
       else if (cmd === 'roll') action = rest ? { t: 'roll', expr: rest } : (canRollCheck() ? { t: 'roll' } : { t: 'roll', expr: '1d20' });
       else if (cmd === 'recap') action = { t: 'recap' };
+      else if (cmd === 'trade' || cmd === 'shop' || cmd === 'buy' || cmd === 'sell') { ta.value = ''; growSay(); sayNote(''); openTrade(); return; }
       else if (cmd === 'ooc') {
         if (!rest) { sayNote('Add your message after /ooc.'); return; }
         action = { t: 'chat', text: rest };
       } else { sayNote(`Unknown command /${cmd}. Try /roll 2d6+3, /recap, /ooc or /help.`); return; }
     } else action = ui.mode === 'talk' ? { t: 'chat', text } : { t: 'intent', kind: ui.mode, text };
+    // Talking shop with a merchant present: open the trade window as well as telling the DM.
+    const wantsTrade = ui.mode !== 'talk' && text[0] !== '/' && shopNow() && TRADE_WORDS.test(text);
 
+    if (wantsTrade) openTrade();
     sending = true;
     $('sendBtn').disabled = true;
     const r = await act(action);
@@ -1105,11 +1111,24 @@
   const signed = (d) => (d > 0 ? '+' : d < 0 ? '−' : '±') + Math.abs(d);
   const qtyLabel = (n, name) => `${n > 1 ? n + '× ' : ''}${name}`;
 
-  const inv = Object.assign({ filter: 'all', sort: 'type', stashOpen: true }, store.get('aidnd.inv') || {}, { sel: null, src: 'pack', qty: 1, confirm: false });
-  const saveInv = () => store.set('aidnd.inv', { filter: inv.filter, sort: inv.sort, stashOpen: inv.stashOpen });
+  // How many of an item can be bought in one go: stacks of consumables, one of anything else.
+  const buyMax = (p, id) => { const it = ITEMS[id]; return it && it.type === 'consumable' && it.value > 0 ? Math.max(1, Math.min(10, Math.floor(p.gold / it.value))) : 1; };
+  // One-line "versus what you wear" for gear: "ATK net +2".
+  function netLine(p, id) {
+    const it = itemOf(id);
+    if (!it.equippable || !SLOT_LIST.includes(it.slot)) return null;
+    const curId = (p.eq || {})[it.slot];
+    if (curId === id) return { text: 'equipped', cls: 'same' };
+    const cur = curId && ITEMS[curId] ? ITEMS[curId] : null;
+    let sum = 0;
+    const bits = STAT_LABEL.map(([k, l]) => { const d = ((it.stats || {})[k] || 0) - ((cur && cur.stats && cur.stats[k]) || 0); sum += d; return d ? `${l} ${signed(d)}` : null; }).filter(Boolean);
+    return { text: (cur ? 'vs ' + cur.name + ': ' : 'slot empty: ') + (bits.join(', ') || 'no change'), cls: sum > 0 ? 'up' : sum < 0 ? 'down' : 'same' };
+  }
+  const inv = Object.assign({ filter: 'all', sort: 'type', stashOpen: true, tradeTab: 'buy' }, store.get('aidnd.inv') || {}, { sel: null, src: 'pack', qty: 1, confirm: false });
+  const saveInv = () => store.set('aidnd.inv', { filter: inv.filter, sort: inv.sort, stashOpen: inv.stashOpen, tradeTab: inv.tradeTab });
 
-  function selectItem(id, src) {
-    const same = inv.sel === id && inv.src === src;
+  function selectItem(id, src, noToggle) {
+    const same = !noToggle && inv.sel === id && inv.src === src;
     inv.sel = same ? null : id; inv.src = src; inv.qty = 1; inv.confirm = false;
     render();
     if (!same) {
@@ -1137,9 +1156,10 @@
   function checkSelection(p, shopOpen) {
     if (!inv.sel) return;
     let have = 0;
-    if (inv.src === 'pack') have = (p.inv || {})[inv.sel] || 0;
+    if (inv.src === 'pack' || inv.src === 'sell') have = (p.inv || {})[inv.sel] || 0;
     else if (inv.src === 'stash') have = (state.stash || {})[inv.sel] || 0;
-    else if (inv.src === 'shop') have = shopOpen && SHOP.includes(inv.sel) && ITEMS[inv.sel] ? 1 : 0;
+    else if (inv.src === 'shop') have = shopOpen && SHOP.includes(inv.sel) && ITEMS[inv.sel] ? buyMax(p, inv.sel) : 0;
+    if (inv.src === 'sell' && have && sellOf(inv.sel) <= 0) have = 0;
     if (!have) { inv.sel = null; inv.confirm = false; inv.qty = 1; return; }
     inv.qty = Math.max(1, Math.min(have, inv.qty || 1));
   }
@@ -1175,7 +1195,7 @@
         type: 'button', class: `slot slot-${slot} ${it ? 'r-' + rarityOf(it) : 'empty'}${on ? ' sel' : ''}`, 'data-k': 'slot-' + slot,
         'aria-pressed': String(on), 'aria-label': it ? `${SLOT_NAMES[slot]}: ${it.name}${statLine(it) ? ', ' + statLine(it) : ''}` : `${SLOT_NAMES[slot]}: empty`,
         onclick: () => {
-          if (id) { selectItem(id, 'pack'); return; }
+          if (id) { selectItem(id, 'pack', true); return; }
           inv.filter = 'gear'; inv.sel = null; saveInv(); render();
           toast(`Nothing in your ${SLOT_NAMES[slot].toLowerCase()} slot. Pick gear from your pack and press Equip.`, 'info');
         },
@@ -1303,26 +1323,27 @@
     const notes = [];
     const acts = [];
 
-    if (src === 'pack') {
+    const whole = src === 'pack';      // the full set of actions; 'sell' is the trade window's short list
+    if (src === 'pack' || src === 'sell') {
       if (it.equippable && SLOT_LIST.includes(it.slot)) {
         if (worn) acts.push(btn('Unequip', SLOT_NAMES[worn], () => invSend({ t: 'unequip', slot: worn }), { k: 'd-unequip', disabled: !canGear }));
         else acts.push(btn('Equip', SLOT_NAMES[it.slot], () => invSend({ t: 'equip', item: id }), { cls: 'primary', k: 'd-equip', disabled: !canGear }));
       }
-      if (it.type === 'consumable') {
+      if (whole && it.type === 'consumable') {
         const tgt = state.players[sel.ally] && state.players[sel.ally].cls ? sel.ally : myId;
         acts.push(btn(tgt === myId ? 'Use on yourself' : `Use on ${nameOf(tgt)}`, null, () => invSend({ t: 'use', item: id, target: tgt }), { cls: worn ? '' : 'primary', k: 'd-use', disabled: !canGear }));
         if (people.length) notes.push(tgt === myId ? 'To use it on an ally, target them on the Party tab.' : `Targeting ${nameOf(tgt)}. Change the target on the Party tab.`);
       }
       if (shopOpen && !quest && price > 0) acts.push(btn(`Sell${qty > 1 ? ' ' + qty : ''}`, `${price * qty} gold`, () => invSend({ t: 'sell', item: id, qty }, `Sold ${qtyLabel(qty, it.name)} for ${price * qty} gold.`), { k: 'd-sell', disabled: inCombat }));
-      acts.push(btn(`Stash${qty > 1 ? ' ' + qty : ''}`, 'party stash', () => invSend({ t: 'stash', item: id, qty }, `${qtyLabel(qty, it.name)} put in the party stash.`), { k: 'd-stash', disabled: inCombat }));
-      if (!quest) acts.push(btn('Drop…', null, () => { inv.confirm = true; render(); const y = document.querySelector('[data-k="d-drop-yes"]'); if (y) y.focus(); }, { cls: 'ghost warnbtn', k: 'd-drop', disabled: inCombat || inv.confirm }));
+      if (whole) acts.push(btn(`Stash${qty > 1 ? ' ' + qty : ''}`, 'party stash', () => invSend({ t: 'stash', item: id, qty }, `${qtyLabel(qty, it.name)} put in the party stash.`), { k: 'd-stash', disabled: inCombat }));
+      if (whole && !quest) acts.push(btn('Drop…', null, () => { inv.confirm = true; render(); const y = document.querySelector('[data-k="d-drop-yes"]'); if (y) y.focus(); }, { cls: 'ghost warnbtn', k: 'd-drop', disabled: inCombat || inv.confirm }));
       if (inCombat) notes.push(turn ? 'Mid-fight you can change gear and use items. Trading, stashing and dropping wait until the fight is over.' : 'Wait for your turn to change gear or use items.');
-      if (quest) notes.push('Quest items cannot be dropped or sold. You can keep them in the party stash.');
-      if (worn && owned === 1 && !inCombat) notes.push('Selling, stashing, giving or dropping it takes it off.');
+      if (quest) notes.push(whole ? 'Quest items cannot be dropped or sold. You can keep them in the party stash.' : 'Quest items cannot be sold.');
+      if (worn && owned === 1 && !inCombat) notes.push(whole ? 'Selling, stashing, giving or dropping it takes it off.' : 'Selling it takes it off.');
     } else if (src === 'shop') {
       const full = packFullFor(p, id);
       const poor = p.gold < (it.value || 0);
-      acts.push(btn('Buy', `${it.value} gold`, () => invSend({ t: 'buy', item: id }, `Bought ${it.name} for ${it.value} gold.`), { cls: 'primary', k: 'd-buy', disabled: poor || full || inCombat }));
+      acts.push(btn(`Buy${qty > 1 ? ' ' + qty : ''}`, `${it.value * qty} gold`, () => buyMany(id, qty), { cls: 'primary', k: 'd-buy', disabled: poor || full || inCombat }));
       if (poor) notes.push(`You need ${it.value - p.gold} more gold.`);
       if (full) notes.push(`Your pack is full (${CAP} kinds of item).`);
       if (owned) notes.push(`You carry ${owned}.`);
@@ -1334,7 +1355,7 @@
     }
 
     const giveTo = people.includes(sel.ally) ? sel.ally : people[0];
-    const giveRow = src === 'pack' && people.length > 0 && h('div', { class: 'give-row' },
+    const giveRow = whole && people.length > 0 && h('div', { class: 'give-row' },
       h('label', null, h('span', { class: 'lbl' }, 'Give one to'),
         h('select', { 'data-keep': 'invGiveTo', 'aria-label': 'Who receives it', disabled: inCombat },
           people.map((pid) => h('option', { value: pid, selected: pid === giveTo }, nameOf(pid))))),
@@ -1343,20 +1364,20 @@
         invSend({ t: 'give', to, item: id }, `Gave ${it.name} to ${nameOf(to)}.`);
       }, { k: 'd-give', disabled: inCombat }));
 
-    const confirm = src === 'pack' && inv.confirm && h('div', { class: 'confirm', role: 'group', 'aria-label': 'Confirm drop' },
+    const confirm = whole && inv.confirm && h('div', { class: 'confirm', role: 'group', 'aria-label': 'Confirm drop' },
       h('p', null, `Drop ${qtyLabel(qty, it.name)}? It is gone for good.`),
       h('div', { class: 'btns' },
         btn(`Drop ${qty > 1 ? qty : 'it'}`, null, () => invSend({ t: 'drop', item: id, qty }, `Dropped ${qtyLabel(qty, it.name)}.`), { cls: 'danger', k: 'd-drop-yes' }),
         btn('Keep it', null, () => { inv.confirm = false; render(); }, { k: 'd-drop-no' })));
 
-    const max = src === 'pack' ? owned : src === 'stash' ? stashed : 1;
+    const max = src === 'pack' || src === 'sell' ? owned : src === 'stash' ? stashed : buyMax(p, id);
     return h('div', { class: `detail r-${rar}`, id: 'invDetail', role: 'region', 'aria-label': `${it.name} details` },
       h('div', { class: 'd-head' },
         h('span', { class: 'd-ic' }, itemIcon(id, 44)),
         h('div', { class: 'd-title' },
           h('b', null, it.name),
           h('span', null, h('span', { class: 'rar r-' + rar }, RARITY[rar]), ` · ${typeName(it)}`,
-            src === 'pack' && owned > 1 ? ` · ×${owned}` : '', src === 'stash' ? ` · ×${stashed} in stash` : '', worn ? ' · equipped' : '')),
+ (src === 'pack' || src === 'sell') && owned > 1 ? ` · ×${owned}` : '', src === 'shop' && owned ? ` · you have ${owned}` : '', src === 'stash' ? ` · ×${stashed} in stash` : '', worn ? ' · equipped' : '')),
         btn('×', null, () => { inv.sel = null; inv.confirm = false; render(); }, { cls: 'ghost close', k: 'd-close', title: 'Close details' })),
       !!it.description && h('p', { class: 'd-desc' }, it.description),
       (statLine(it) || (it.effects || []).length > 0) && h('ul', { class: 'd-stats' },
@@ -1364,47 +1385,114 @@
         (it.effects || []).map((e) => h('li', { class: 'fx' }, effectText(e)))),
       h('p', { class: 'd-value' }, `Value ${it.value || 0} gold`, ' · ', quest ? 'cannot be sold' : price > 0 ? `sells for ${price} each` : 'worthless to a merchant'),
       compareBlock(p, id),
-      src !== 'shop' && stepper(max),
+      stepper(max),
       h('div', { class: 'btns d-acts' }, acts),
       giveRow,
       confirm,
       notes.map((n) => h('p', { class: 'hint' }, n)));
   }
 
+  async function buyMany(id, n) {
+    const it = itemOf(id);
+    let got = 0;
+    for (let i = 0; i < n; i++) {
+      if (!(await send({ t: 'buy', item: id }))) break;
+      got++;
+    }
+    inv.qty = 1;
+    if (got) toast(`Bought ${qtyLabel(got, it.name)} for ${got * (it.value || 0)} gold.`, 'info');
+    render();
+  }
+
+  // The trade window: buy from Engine.SHOP, sell from your pack.
   function tradePanel(p, ctx) {
-    const sellable = Object.keys(p.inv || {}).filter((id) => p.inv[id] > 0 && sellOf(id) > 0 && itemOf(id).type !== 'quest')
-      .sort((a, b) => sellOf(b) - sellOf(a));
-    const row = (id, src, right) => {
+    const sellable = Object.keys(p.inv || {}).filter((id) => p.inv[id] > 0).sort((a, b) => (sellOf(b) - sellOf(a)) || itemOf(a).name.localeCompare(itemOf(b).name));
+    const kinds = packKinds(p);
+    const row = (id, src, sub, right, extra) => {
       const it = itemOf(id);
       const on = inv.sel === id && inv.src === src;
-      return h('li', { class: `trow r-${rarityOf(it)}${on ? ' sel' : ''}` },
+      const nl = netLine(p, id);
+      return h('li', { class: `trow r-${rarityOf(it)}${on ? ' sel' : ''}${extra && extra.dim ? ' dim' : ''}` },
         h('button', { type: 'button', class: 'trow-main', 'data-k': `${src}-row-${id}`, 'aria-pressed': String(on),
-          'aria-label': `${it.name}, ${typeName(it).toLowerCase()}${src === 'sellrow' && p.inv[id] > 1 ? ', ' + p.inv[id] + ' carried' : ''}. Show details`,
-          onclick: () => selectItem(id, src === 'sellrow' ? 'pack' : 'shop') },
-        itemIcon(id, 24),
-        h('span', { class: 'tn' }, h('span', null, it.name + (src === 'sellrow' && p.inv[id] > 1 ? ` ×${p.inv[id]}` : '')),
-          h('small', null, src === 'sellrow' && slotOf(p, id) ? 'equipped' : shortInfo(it)))),
+          'aria-label': `${it.name}, ${typeName(it).toLowerCase()}, ${sub}. Show details`, onclick: () => selectItem(id, src) },
+        itemIcon(id, 28),
+        h('span', { class: 'tn' },
+          h('span', null, it.name),
+          h('small', null, sub),
+          !!nl && src === 'shop' && h('small', { class: 'net ' + nl.cls }, nl.text))),
         right);
     };
-    return h('section', { class: 'inv-sec trade', id: 'tradeBox', 'aria-labelledby': 'tradeHead' },
-      h('div', { class: 'sec-head' }, h('h4', { id: 'tradeHead' }, 'Trade'), h('span', { class: 'hint' }, `A merchant is here · you have ${p.gold} gold`)),
-      h('div', { class: 'trade-cols' },
-        h('div', { class: 'tcol' }, h('span', { class: 'lbl' }, 'Buy'),
+    const tabBtn = (t, label) => h('button', { type: 'button', role: 'tab', 'data-k': 'ttab-' + t, 'aria-selected': String(inv.tradeTab === t),
+      onclick: () => { inv.tradeTab = t; saveInv(); render(); } }, label);
+    return [
+      h('div', { class: 'trade-top' },
+        h('span', { class: 'pill gold' }, h('small', null, 'Gold'), h('b', null, String(p.gold))),
+        h('span', { class: 'cap' + (kinds >= CAP ? ' full' : kinds >= CAP - 2 ? ' near' : '') }, h('span', { class: 'cap-num' }, `Pack ${kinds} / ${CAP}`)),
+        h('span', { class: 'hint' }, 'Merchants pay half an item’s value.')),
+      h('div', { class: 'trade-tabs', role: 'tablist', 'aria-label': 'Buy or sell' }, tabBtn('buy', 'Buy'), tabBtn('sell', 'Sell')),
+      h('div', { class: 'trade-cols', 'data-show': inv.tradeTab },
+        h('div', { class: 'tcol buy' }, h('span', { class: 'lbl' }, 'Buy'),
           h('ul', { class: 'tlist' }, SHOP.filter((id) => ITEMS[id]).map((id) => {
             const it = ITEMS[id];
             const poor = p.gold < it.value;
             const full = packFullFor(p, id);
-            return row(id, 'shop', h('button', { type: 'button', class: 'tprice buy', 'data-k': 'buy-' + id, disabled: poor || full,
+            const have = (p.inv || {})[id] || 0;
+            const why = poor ? `need ${it.value - p.gold} more gold` : full ? 'pack full' : '';
+            const sub = [shortInfo(it), have ? `have ${have}` : '', why].filter(Boolean).join(' · ');
+            return row(id, 'shop', sub, h('button', { type: 'button', class: 'tprice buy', 'data-k': 'buy-' + id, disabled: poor || full || ctx.inCombat,
               title: poor ? `You need ${it.value - p.gold} more gold` : full ? 'Your pack is full' : `Buy ${it.name}`,
-              'aria-label': `Buy ${it.name} for ${it.value} gold`, onclick: () => invSend({ t: 'buy', item: id }, `Bought ${it.name} for ${it.value} gold.`) }, `${it.value} g`));
+              'aria-label': `Buy ${it.name} for ${it.value} gold${why ? ' (' + why + ')' : ''}`, onclick: () => buyMany(id, 1) }, `${it.value} g`), { dim: poor || full });
           }))),
-        h('div', { class: 'tcol' }, h('span', { class: 'lbl' }, 'Sell'),
+        h('div', { class: 'tcol sell' }, h('span', { class: 'lbl' }, 'Sell'),
           sellable.length
-            ? h('ul', { class: 'tlist' }, sellable.map((id) => row(id, 'sellrow', h('button', { type: 'button', class: 'tprice sell', 'data-k': 'sell-' + id,
-              'aria-label': `Sell one ${itemOf(id).name} for ${sellOf(id)} gold`, onclick: () => invSend({ t: 'sell', item: id, qty: 1 }, `Sold ${itemOf(id).name} for ${sellOf(id)} gold.`) }, `${sellOf(id)} g`))))
-            : h('p', { class: 'hint' }, 'Nothing the merchant wants.'),
-          h('p', { class: 'hint' }, 'Merchants pay half the value. Select an item to sell several at once.'))),
-      inv.sel && inv.src === 'shop' && detailPanel(p, ctx));
+            ? h('ul', { class: 'tlist' }, sellable.map((id) => {
+              const it = itemOf(id);
+              const price = sellOf(id);
+              const quest = it.type === 'quest';
+              const worn = slotOf(p, id);
+              const sub = [p.inv[id] > 1 ? `×${p.inv[id]}` : '', worn ? 'equipped' : '', quest ? 'quest item, not for sale' : price <= 0 ? 'worthless here' : `${price} g each`].filter(Boolean).join(' · ');
+              return row(id, 'sell', sub, quest || price <= 0
+                ? h('span', { class: 'tprice none', 'aria-hidden': 'true' }, '—')
+                : h('button', { type: 'button', class: 'tprice sell', 'data-k': 'sell-' + id, disabled: ctx.inCombat,
+                  'aria-label': `Sell one ${it.name} for ${price} gold${worn ? ' (equipped)' : ''}`,
+                  onclick: () => invSend({ t: 'sell', item: id, qty: 1 }, `Sold ${it.name} for ${price} gold.`) }, `${price} g`), { dim: quest || price <= 0 });
+            }))
+            : h('p', { class: 'hint' }, 'Your pack is empty.'),
+          h('p', { class: 'hint' }, 'Select an item to sell several at once.'))),
+      inv.sel && (inv.src === 'shop' || inv.src === 'sell') && detailPanel(p, ctx),
+    ];
+  }
+
+  const shopNow = () => !!state && state.phase === 'scene' && !!(state.scene || {}).shop && !!me() && !!me().cls;
+  function openTrade() {
+    if (!shopNow()) { toast('There is no merchant here. Ask around: when one is present, the trade window opens.'); return; }
+    if (inv.src !== 'shop' && inv.src !== 'sell') { inv.sel = null; }
+    delete sigs.trade;
+    openDlg('tradeDlg');
+    renderTrade();
+  }
+  const typing = () => { const a = document.activeElement; return !!a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'checkbox' && a.type !== 'range')) && !!a.value.trim(); };
+
+  function renderTrade() {
+    const flag = !!(state.scene || {}).shop;
+    const open = shopNow();
+    $('tradeCta').hidden = !open;
+    $('shopMark').hidden = !open;
+    // A merchant appears during play: offer the trade window once.
+    if (ui.shopWas === false && flag && state.phase === 'scene' && open && liveLoad) {
+      toast('A merchant is ready to trade.', 'info');
+      if (!typing() && !$('tradeDlg').open && !document.querySelector('dialog[open]')) openTrade();
+    }
+    ui.shopWas = state.phase === 'lobby' ? undefined : flag;
+    const d = $('tradeDlg');
+    if (!d.open) return;
+    if (!open) { closeDlg('tradeDlg'); toast(state.phase === 'combat' ? 'Trading stops: a fight breaks out!' : 'The merchant is no longer here.'); return; }
+    const p = me();
+    $('tradeGold').textContent = `${p.gold} gold`;
+    const people = others().filter((id) => !!state.players[id].cls);
+    if (inv.src === 'shop' || inv.src === 'sell') checkSelection(p, true);
+    const ctx = { inCombat: false, turn: false, shopOpen: true, people };
+    paint('trade', $('tradeBody'), [p, inv, state.phase], () => tradePanel(p, ctx));
   }
 
   function stashPanel(p, ctx) {
@@ -1446,7 +1534,7 @@
     const shopOpen = state.phase === 'scene' && !!sc.shop;
     const people = others().filter((id) => !!state.players[id].cls);
     const roster = people.map((id) => [id, nameOf(id)]);
-    if (p && p.cls) checkSelection(p, shopOpen);
+    if (p && p.cls && inv.src !== 'shop' && inv.src !== 'sell') checkSelection(p, shopOpen);
     paint('sheet', $('sheet'), [p, state.stash, shopOpen, inCombat, turn, sel.ally, ui.give, roster, state.phase, inv], () => {
       if (!p || !p.cls) return h('p', { class: 'hint' }, 'Choose a class and your sheet appears here.');
       const ctx = { inCombat, turn, shopOpen, people };
@@ -1455,7 +1543,8 @@
         heroCard(p, canGive),
         dollPanel(p),
         packPanel(p, ctx),
-        shopOpen && tradePanel(p, ctx),
+        shopOpen && h('div', { class: 'trade-banner' }, h('span', null, 'A merchant is here.'),
+          btn('Trade with the merchant', 'buy and sell', openTrade, { cls: 'primary', k: 'pack-trade' })),
         stashPanel(p, ctx));
     });
   }
@@ -1579,7 +1668,7 @@
     }
     if (ui.give && state.phase === 'combat') ui.give = null;
     renderHeader(); renderTabs(); renderScene(); renderLobby(); renderDm(); renderDock();
-    renderComposer(); renderParty(); renderSheet(); renderJournal(); renderLog();
+    renderComposer(); renderParty(); renderSheet(); renderTrade(); renderJournal(); renderLog();
   }
 
   // ---------------- settings and export ----------------
@@ -1778,6 +1867,12 @@
     if (b) store.set('aidnd.textsize', applyTextSize(b.getAttribute('data-size')));
   });
 
+  $('tradeCta').addEventListener('click', openTrade);
+  $('shopMark').addEventListener('click', openTrade);
+  $('tradeDlg').addEventListener('close', () => {
+    if (inv.src === 'shop' || inv.src === 'sell') { inv.sel = null; inv.confirm = false; inv.qty = 1; }
+    if (state) render();
+  });
   $('tabs').addEventListener('click', (ev) => {
     const b = ev.target.closest('button[data-tab]');
     if (!b || !state) return;

@@ -409,9 +409,10 @@ body.busy .dock button, body.busy .inv button, body.busy .lobby button, body.bus
   body.in-game .tabs button:focus-visible { outline-offset: -3px; }
   body.in-game .tabs button.unread::after { content: ""; position: absolute; top: 7px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--blood); }
   .game[data-tab] .col-side > [data-pane]:not([data-pane="story"]) { display: none; }
-  .game[data-tab="party"] .col-side > [data-pane="party"],
-  .game[data-tab="pack"] .col-side > [data-pane="pack"],
-  .game[data-tab="journal"] .col-side > [data-pane="journal"] { display: block; }
+  /* same specificity as the hiding rule above (the :not() counts), so these win by order */
+  .game[data-tab="party"] .col-side > [data-pane="party"]:not([data-pane="story"]),
+  .game[data-tab="pack"] .col-side > [data-pane="pack"]:not([data-pane="story"]),
+  .game[data-tab="journal"] .col-side > [data-pane="journal"]:not([data-pane="story"]) { display: block; }
   .game:not([data-tab="story"]) .col-side > .pane-story { display: none; }
   .pane-story { display: flex; flex-direction: column; min-height: 0; }
   body.in-game .col-side > #composer { order: 9; }
@@ -586,3 +587,41 @@ button.warnbtn { color: #e39a90; }
 @media (max-width: 860px) {
   .igrid { grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); }
 }
+
+/* trade window (modal) and the ways in */
+dialog.trade-dlg { width: min(820px, calc(100vw - 16px)); max-height: min(92vh, 860px); max-height: min(92dvh, 860px); }
+.trade-dlg .dlg-head { flex-wrap: wrap; }
+.trade-dlg .dlg-head h2 { flex: 1 1 auto; min-width: 0; }
+.trade-gold { font: 700 .95rem var(--font-mono); color: var(--brass); white-space: nowrap; }
+.trade-dlg .dlg-body { padding-top: 12px; }
+.trade-top { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+.trade-top .hint { font-size: .82rem; }
+.trade-tabs { display: none; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--ink); }
+.trade-tabs button { flex: 1 1 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); padding: 8px; }
+.trade-tabs button + button { border-left: 1px solid var(--line); }
+.trade-tabs button[aria-selected="true"] { background: var(--brass); color: var(--brass-ink); font-weight: 700; }
+.trade-tabs button:focus-visible { outline-offset: -3px; }
+.trade-dlg .trade-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 620px) {
+  .trade-tabs { display: flex; }
+  .trade-dlg .trade-cols { grid-template-columns: minmax(0, 1fr); }
+  .trade-cols[data-show="buy"] .tcol.sell, .trade-cols[data-show="sell"] .tcol.buy { display: none; }
+  .trade-dlg .tcol > .lbl { display: none; }
+  .trade-dlg .dlg-body { padding: 10px 10px 14px; }
+  .trade-dlg .dlg-head { padding: 10px 12px; }
+  .trade-dlg .dlg-head h2 { font-size: 1.2rem; }
+}
+.trow.dim .trow-main { opacity: .62; }
+.tn small.net { font-size: .7rem; }
+.tn small.net.up { color: var(--moss); }
+.tn small.net.down { color: #e39a90; }
+.tprice.none { color: var(--muted); border: 0; background: none; padding: 4px 10px; }
+.trade-cta { display: flex; align-items: baseline; justify-content: center; gap: 8px; width: 100%; background: color-mix(in srgb, var(--brass) 16%, var(--slate-2)); border-color: var(--brass); color: var(--brass); font-weight: 700; }
+.trade-cta small { font-weight: 400; color: var(--muted); font-size: .8rem; }
+#sceneBox { position: relative; }
+.shop-mark { position: absolute; top: 12px; right: 12px; z-index: 4; padding: 3px 10px; font-size: .82rem; border-radius: 999px;
+  background: rgba(12, 16, 19, .9); border-color: var(--brass); color: var(--brass); box-shadow: 0 2px 8px rgba(0, 0, 0, .5); }
+.trade-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; border: 1px solid color-mix(in srgb, var(--brass) 55%, var(--line)); border-radius: 8px; padding: 8px 10px; background: color-mix(in srgb, var(--brass) 8%, var(--ink)); }
+.trade-banner > span { color: var(--brass); font-family: var(--font-display); font-size: 1.05rem; }
+.trade-banner button small { display: block; font-size: .72rem; font-weight: 400; opacity: .75; }
+body.busy .trade-dlg button { opacity: .6; pointer-events: none; }
