@@ -10,5 +10,11 @@ services:
     startCommand: node server.js
     healthCheckPath: /healthz
     envVars:
+      # The Dungeon Master's brain. Set one of these two.
+      - key: ANTHROPIC_API_KEY
+        sync: false
       - key: GEMINI_API_KEY
+        sync: false
+      # Voices for the Dungeon Master and NPCs (optional).
+      - key: ELEVENLABS_API_KEY
         sync: false

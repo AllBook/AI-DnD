@@ -1,14 +1,16 @@
 {
   "name": "ai-dnd-online",
-  "version": "1.0.0",
-  "description": "Online co-op multiplayer for AI-DnD: shared rooms, turn-based combat, AI Dungeon Master.",
+  "version": "2.0.0",
+  "description": "Online co-op multiplayer for AI-DnD: an interactive AI Dungeon Master with voices, for up to five friends.",
   "private": true,
   "license": "MIT",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/sim.js",
+    "test": "node test/sim.js && node test/server.test.js && node test/providers.test.js",
     "build:artifact": "node tools/build-artifact.js"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

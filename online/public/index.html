@@ -3,78 +3,183 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
 <title>AI-DnD Online</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700&family=IM+Fell+English+SC&display=swap">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <!--app-->
-<div class="wrap">
+<div class="wrap" id="app">
   <header class="top">
     <div class="brand">AI-DnD <span>Online</span></div>
     <div class="top-meta" id="topMeta" hidden>
+      <button class="code" id="codeBtn" type="button" title="Copy the invite" aria-label="Party code. Copy the invite"></button>
       <span class="chip" id="aiChip"></span>
-      <span class="chip" id="connChip"></span>
-      <button class="code" id="codeBtn" type="button" title="Copy invite"></button>
+      <span class="chip" id="voiceChip"></span>
+      <span class="chip conn" id="connChip" role="status"><i class="dot" aria-hidden="true"></i><span id="connText">Connected</span></span>
+      <button class="ghost" id="settingsBtn" type="button">Settings</button>
       <button class="ghost" id="leaveBtn" type="button">Leave</button>
     </div>
   </header>
 
   <section class="join" id="joinView">
     <h1>Gather your party</h1>
-    <p class="lede">A co-op dungeon crawl for up to six friends, run by an AI Dungeon Master. One of you creates a party, the rest join with its four-letter code.</p>
-    <form class="join-form" id="joinForm" autocomplete="off">
+    <p class="lede">A co-op adventure for up to five friends, run by an AI Dungeon Master. Say what your character does in plain words; the DM answers, voices the people you meet and calls for the dice. One of you creates a party, the rest join with its code.</p>
+    <div class="join-form" id="joinForm">
       <label for="nameInput">Your adventurer's name</label>
-      <input id="nameInput" maxlength="20" placeholder="e.g. Aria" required>
+      <input id="nameInput" maxlength="20" placeholder="e.g. Aria" autocomplete="off">
       <div class="join-row">
         <button class="primary" id="createBtn" type="button">Create a party</button>
         <span class="or">or</span>
-        <input id="codeInput" maxlength="4" placeholder="CODE" aria-label="Party code">
-        <button id="joinBtn" type="submit">Join</button>
+        <input id="codeInput" maxlength="48" placeholder="CODE" aria-label="Party code or rejoin code" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <button id="joinBtn" type="button">Join</button>
       </div>
-      <p class="note" id="joinNote"></p>
-    </form>
+      <p class="hint">Lost your seat? Type your rejoin code in the code box to take your character back.</p>
+      <p class="note" id="joinNote" role="status"></p>
+    </div>
     <p class="lede small" id="modeHint" hidden></p>
-    <ol class="route" aria-label="The road ahead">
-      <li>Thornhaven Village</li><li>Darkwood Forest</li><li>Emberpeak Mine Entrance</li><li>Main Mine Shaft</li><li>Storage Cavern</li><li>Deep Mines</li><li>Ancient Crypt</li>
-    </ol>
+    <p class="howto"><button class="link" id="howBtn" type="button">How to play</button></p>
   </section>
 
-  <main class="game" id="gameView" hidden>
-    <div class="col-main">
-      <section class="scene">
+  <main class="game" id="gameView" data-tab="story" hidden>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <button type="button" data-tab="story" aria-pressed="true">Story</button>
+      <button type="button" data-tab="party" aria-pressed="false">Party</button>
+      <button type="button" data-tab="pack" aria-pressed="false">Pack</button>
+      <button type="button" data-tab="journal" aria-pressed="false">Journal</button>
+    </nav>
+
+    <div class="col-main" data-pane="story">
+      <section class="scene" id="sceneBox">
         <div class="scene-head">
           <h2 id="locName"></h2>
-          <ol class="pips" id="pips" aria-label="Progress"></ol>
+          <span class="chip amb" id="ambChip"></span>
         </div>
         <div class="foes" id="foes"></div>
       </section>
-      <section class="actions" id="actions" aria-live="polite"></section>
+
+      <section class="lobby" id="lobby" hidden></section>
+
       <section class="logbox">
-        <div class="log" id="log" aria-live="polite"></div>
-        <form class="chat" id="chatForm" autocomplete="off">
-          <input id="chatInput" maxlength="240" placeholder="Say something to the party…" aria-label="Message">
-          <label class="askdm" title="Have the Dungeon Master answer"><input type="checkbox" id="askDm"> Ask the DM</label>
-          <button type="submit">Send</button>
-        </form>
+        <div class="log-wrap">
+          <div class="log" id="log" role="log" aria-live="polite" aria-label="Story feed" tabindex="0"></div>
+          <button class="jump" id="jumpBtn" type="button" hidden>New messages</button>
+        </div>
+        <div class="dmbox" id="dmBox"></div>
+      </section>
+
+      <section class="dock actions" id="dock" hidden></section>
+
+      <section class="composer" id="composer">
+        <div class="chips" id="chips" aria-label="Suggested actions"></div>
+        <div class="modes" id="modes" role="radiogroup" aria-label="Message type">
+          <button type="button" role="radio" data-mode="do" aria-checked="true">Do</button>
+          <button type="button" role="radio" data-mode="say" aria-checked="false">Say</button>
+          <button type="button" role="radio" data-mode="ask" aria-checked="false">Ask the DM</button>
+          <button type="button" role="radio" data-mode="talk" aria-checked="false">Table talk</button>
+        </div>
+        <div class="say">
+          <textarea id="sayInput" rows="2" maxlength="500" aria-label="Your message" autocomplete="off"></textarea>
+          <div class="say-btns">
+            <button type="button" class="mic" id="micBtn" aria-pressed="false" title="Dictate with your microphone" hidden>Mic</button>
+            <button type="button" class="primary" id="sendBtn">Send</button>
+          </div>
+        </div>
+        <p class="note" id="sayNote" role="alert"></p>
       </section>
     </div>
+
     <aside class="col-side">
-      <section>
+      <section data-pane="party">
         <h3>The party</h3>
         <div class="party" id="party"></div>
       </section>
-      <section id="sheetBox">
-        <h3>Your pack</h3>
+      <section data-pane="pack" id="sheetBox">
+        <h3>Your sheet and pack</h3>
         <div class="sheet" id="sheet"></div>
+      </section>
+      <section data-pane="journal">
+        <h3>Journal</h3>
+        <div class="journal" id="journal"></div>
       </section>
     </aside>
   </main>
+
+  <dialog id="settingsDlg" aria-labelledby="setTitle">
+    <div class="dlg-head">
+      <h2 id="setTitle">Settings</h2>
+      <button class="ghost" type="button" data-close>Close</button>
+    </div>
+    <div class="dlg-body">
+      <fieldset id="soundSet">
+        <legend>Sound</legend>
+        <label class="slider"><span>Master</span><input type="range" min="0" max="100" step="1" data-vol="master"></label>
+        <label class="slider"><span>Voice</span><input type="range" min="0" max="100" step="1" data-vol="voice"></label>
+        <label class="slider"><span>Ambience</span><input type="range" min="0" max="100" step="1" data-vol="ambience"></label>
+        <label class="slider"><span>Effects</span><input type="range" min="0" max="100" step="1" data-vol="effects"></label>
+        <label class="check"><input type="checkbox" id="autoplayBox"> Read the Dungeon Master aloud as replies arrive</label>
+        <p class="hint" id="audioNote" hidden>Sound is not available in this view.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Text size</legend>
+        <div class="modes" id="textSize" role="radiogroup" aria-label="Text size">
+          <button type="button" role="radio" data-size="0" aria-checked="false">Small</button>
+          <button type="button" role="radio" data-size="1" aria-checked="true">Medium</button>
+          <button type="button" role="radio" data-size="2" aria-checked="false">Large</button>
+        </div>
+      </fieldset>
+      <fieldset id="seatSet" hidden>
+        <legend>Your seat</legend>
+        <p class="hint">Your rejoin code gives you this character back on another device, or after clearing your browser. Keep it to yourself.</p>
+        <div class="invite-row"><code id="rejoinCode"></code><button type="button" id="rejoinCopy">Copy</button></div>
+      </fieldset>
+      <div class="btns">
+        <button type="button" id="helpBtn">How to play</button>
+        <button type="button" id="exportBtn">Export the story (Markdown)</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="helpDlg" aria-labelledby="helpTitle">
+    <div class="dlg-head">
+      <h2 id="helpTitle">How to play</h2>
+      <button class="ghost" type="button" data-close>Close</button>
+    </div>
+    <div class="dlg-body prose">
+      <ol>
+        <li><b>Gather.</b> One player creates a party and shares the invite. Up to five can sit at the table. Everyone picks a class; the host picks the adventure and begins.</li>
+        <li><b>Say what you do.</b> In a scene, type what your character does or says, or ask the Dungeon Master a question. Everything sent while the DM is busy is answered together in the next reply.</li>
+        <li><b>Roll when asked.</b> When the DM calls for a check, the named player presses Roll d20. The dice decide, and everyone sees the result.</li>
+        <li><b>Fight in turns.</b> Combat uses buttons: pick a target, then attack, use an ability or spell, defend, or improvise a stunt. You can still ask the DM questions in a fight.</li>
+        <li><b>Table talk</b> is chat between players. The DM does not read it.</li>
+      </ol>
+      <p>Commands: <code>/roll 2d6+3</code> rolls dice for all to see, <code>/recap</code> asks for the story so far, <code>/ooc text</code> sends table talk, <code>/help</code> opens this page.</p>
+      <p>Keys: Enter sends, Shift+Enter starts a new line, Escape stops the narration.</p>
+    </div>
+  </dialog>
+
+  <dialog id="leaveDlg" aria-labelledby="leaveTitle">
+    <div class="dlg-head">
+      <h2 id="leaveTitle">Leave this party?</h2>
+    </div>
+    <div class="dlg-body">
+      <p>Leaving gives up your seat and your character. To take a break and come back to the same character, close the tab instead: your seat is kept.</p>
+      <div class="btns">
+        <button type="button" class="danger" id="leaveYes">Leave the party</button>
+        <button type="button" data-close>Stay</button>
+      </div>
+    </div>
+  </dialog>
+
   <div class="toast" id="toast" role="status" hidden></div>
 </div>
 <!--/app-->
 <script src="/data.js"></script>
+<script src="/dm.js"></script>
 <script src="/engine.js"></script>
+<script src="/audio.js"></script>
+<script src="/net.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
