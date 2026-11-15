@@ -24,6 +24,7 @@ const out = [
   script(read('engine.js')),
   script(read('public/audio.js')),
   script(read('public/net.js')),
+  fs.existsSync(path.join(root, 'public/table.js')) ? script(read('public/table.js')) : '',
   script(read('public/app.js')),
   '',
 ].join('\n');

@@ -52,10 +52,10 @@
   const ABILITY_FULL = { STR: 'Strength', DEX: 'Dexterity', CON: 'Constitution', INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma' };
   const AMBIENCE = { tavern: 'Tavern', town: 'Town', forest: 'Forest', cave: 'Cave', dungeon: 'Dungeon', crypt: 'Crypt', mountain: 'Mountain', storm: 'Storm', camp: 'Camp', combat: 'Battle', none: 'Quiet' };
   const MODES = {
-    do: { verb: 'does', hint: 'What does your character do?' },
-    say: { verb: 'says', hint: 'What does your character say?' },
-    ask: { verb: 'asks the DM', hint: 'Ask the Dungeon Master a question…' },
-    talk: { verb: 'table talk', hint: 'Talk to the other players (the DM does not read this)…' },
+    do: { verb: 'does', hint: 'What do you do?', tip: 'Describe what your character does. The Dungeon Master answers.' },
+    say: { verb: 'says', hint: 'What do you say?', tip: 'Speak in character. The Dungeon Master and the people in the scene hear it.' },
+    ask: { verb: 'asks the DM', hint: 'Ask the DM…', tip: 'Ask the Dungeon Master a question about the scene or the rules.' },
+    talk: { verb: 'table talk', hint: 'Talk to the table…', tip: 'Chat with the other players. The Dungeon Master does not read this.' },
   };
   const TONES = [['family', 'Family friendly'], ['classic', 'Classic fantasy'], ['grim', 'Grim']];
   const DIFFS = [['story', 'Story (gentle)'], ['balanced', 'Balanced'], ['hard', 'Hard']];
@@ -610,6 +610,18 @@
 
     paint('dm', box, [dm.busy, queue, ck, dm.note, nudge, mine, open, names, lobby], () => {
       const kids = [];
+      if (ck) {
+        const whoName = who ? who.name : 'a missing adventurer';
+        kids.push(h('div', { class: 'check' + (mine ? ' mine' : '') },
+          h('div', { class: 'check-head' },
+            h('b', null, `${ABILITY_FULL[ck.ability] || ck.ability || 'Ability'} check`),
+            h('span', null, mine ? 'for you' : `for ${whoName}`),
+            typeof ck.dc === 'number' && h('span', { class: 'dc' }, `DC ${ck.dc}`)),
+          !!ck.reason && h('p', null, ck.reason),
+          mine ? rollButton('Roll d20')
+            : open ? [h('p', { class: 'hint' }, `${whoName} has not rolled. Anyone may roll for them now.`), rollButton(`Roll d20 for ${whoName}`)]
+              : h('p', { class: 'hint' }, `Waiting for ${whoName} to roll…`)));
+      }
       if (dm.busy) {
         kids.push(h('div', { class: 'thinking' },
           h('span', { class: 'dots', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
@@ -622,18 +634,6 @@
           h('span', { class: 'lbl' }, 'Waiting for the next reply:'),
           h('ul', null, queue.map((it) => h('li', null,
             h('b', null, nameOf(it.pid)), ' ', h('span', { class: 'tag' }, (MODES[it.kind] || MODES.do).verb), ' ', it.text)))));
-      }
-      if (ck) {
-        const whoName = who ? who.name : 'a missing adventurer';
-        kids.push(h('div', { class: 'check' + (mine ? ' mine' : '') },
-          h('div', { class: 'check-head' },
-            h('b', null, `${ABILITY_FULL[ck.ability] || ck.ability || 'Ability'} check`),
-            h('span', null, mine ? 'for you' : `for ${whoName}`),
-            typeof ck.dc === 'number' && h('span', { class: 'dc' }, `DC ${ck.dc}`)),
-          !!ck.reason && h('p', null, ck.reason),
-          mine ? rollButton('Roll d20')
-            : open ? [h('p', { class: 'hint' }, `${whoName} has not rolled. Anyone may roll for them now.`), rollButton(`Roll d20 for ${whoName}`)]
-              : h('p', { class: 'hint' }, `Waiting for ${whoName} to roll…`)));
       }
       if (dm.note && !lobby) kids.push(h('p', { class: 'dm-note' }, dm.note));
       return kids;
@@ -736,7 +736,8 @@
           const ally = state.players[sel.ally] || p;
           const pots = consumables(p);
           kids.push(h('div', { class: 'turn mine' }, `Round ${c.round} — your turn`),
-            h('p', { class: 'hint' }, `Target: ${foe ? foe.name : '—'} · Ally: ${ally.id === myId ? 'yourself' : ally.name}. Tap a foe or a party member to change.`),
+            h('p', { class: 'hint' }, `Target: ${foe ? foe.name : '—'} · Ally: ${ally.id === myId ? 'yourself' : ally.name}`,
+              h('span', { class: 'wide' }, '. Tap a foe or a party member to change.')),
             h('div', { class: 'btns' },
               btn('Attack', `ATK ${atkOf(p)}`, { t: 'attack', target: sel.enemy }, { cls: 'primary' }),
               ((CLASSES[p.cls] || {}).abilities || []).filter((id) => ABILITIES[id]).map((id) => {
@@ -786,10 +787,11 @@
       const m = b.getAttribute('data-mode');
       b.setAttribute('aria-checked', String(m === ui.mode));
       b.disabled = !ok.includes(m);
-      b.title = ok.includes(m) ? '' : state.phase === 'combat' ? 'In a fight, use the action buttons. You can still ask the DM.' : 'Not available right now.';
+      b.title = ok.includes(m) ? MODES[m].tip : state.phase === 'combat' ? 'In a fight, use the action buttons. You can still ask the DM.' : 'Not available right now.';
     });
     const ta = $('sayInput');
     ta.placeholder = MODES[ui.mode].hint;
+    ta.title = MODES[ui.mode].tip;
     $('sendBtn').textContent = ui.mode === 'ask' ? 'Ask' : ui.mode === 'talk' ? 'Talk' : 'Send';
     $('micBtn').hidden = !A.mic();
 
@@ -806,6 +808,12 @@
   }
 
   function sayNote(msg) { $('sayNote').textContent = msg || ''; }
+  // The message box grows with what is typed, up to a few lines.
+  function growSay() {
+    const ta = $('sayInput');
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight + 2, 150) + 'px';
+  }
 
   function canRollCheck() {
     const ck = state && state.dm && state.dm.check;
@@ -827,7 +835,7 @@
       const m = /^\/([a-zA-Z]+)\s*([\s\S]*)$/.exec(text);
       const cmd = m ? m[1].toLowerCase() : '';
       const rest = m ? m[2].trim() : '';
-      if (cmd === 'help') { ta.value = ''; sayNote(''); openDlg('helpDlg'); return; }
+      if (cmd === 'help') { ta.value = ''; growSay(); sayNote(''); openDlg('helpDlg'); return; }
       else if (cmd === 'roll') action = rest ? { t: 'roll', expr: rest } : (canRollCheck() ? { t: 'roll' } : { t: 'roll', expr: '1d20' });
       else if (cmd === 'recap') action = { t: 'recap' };
       else if (cmd === 'ooc') {
@@ -845,6 +853,7 @@
       // Clear only what was sent; anything typed while waiting stays.
       if (ta.value === raw) ta.value = '';
       else if (ta.value.startsWith(raw)) ta.value = ta.value.slice(raw.length).replace(/^\s+/, '');
+      growSay();
       sayNote('');
       A.call('sfx', 'send');
       ui.pinned = true;
@@ -869,7 +878,7 @@
     if (micOn) { try { mic.stop(); } catch (e) { /* ignore */ } setMic(false); return; }
     const base = ta.value ? ta.value.replace(/\s*$/, ' ') : '';
     try {
-      mic.start((text) => { if (typeof text === 'string') ta.value = (base + text).slice(0, 500); }, () => setMic(false));
+      mic.start((text) => { if (typeof text === 'string') { ta.value = (base + text).slice(0, 500); growSay(); } }, () => setMic(false));
       setMic(true);
     } catch (e) { setMic(false); toast('The microphone is not available.'); }
   }
@@ -1077,8 +1086,7 @@
 
   function renderLog() {
     const log = $('log');
-    const visible = log.clientHeight > 0;
-    const pinned = forcePin || (visible ? logPinned() : ui.pinned);
+    const pinned = forcePin || ui.pinned;
     forcePin = false;
     const voiceOn = canVoice();
     const live = new Set();
@@ -1108,6 +1116,7 @@
     $('topMeta').hidden = !inGame;
     document.body.classList.toggle('in-game', inGame);
     document.body.classList.toggle('playing', inGame && state.phase !== 'lobby');
+    document.body.classList.toggle('combat', inGame && state.phase === 'combat');
     if (!inGame) {
       if (session && !state) joinNote('Joining…', true);
       return;
@@ -1120,7 +1129,7 @@
   // ---------------- settings and export ----------------
 
   function applyTextSize(n) {
-    const v = [0, 1, 2].includes(Number(n)) ? Number(n) : 1;
+    const v = n != null && [0, 1, 2].includes(Number(n)) ? Number(n) : 1;
     document.documentElement.setAttribute('data-ts', String(v));
     $('textSize').querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(Number(b.getAttribute('data-size')) === v)));
     return v;
@@ -1330,6 +1339,7 @@
   $('sayInput').addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); submitSay(); }
   });
+  $('sayInput').addEventListener('input', growSay);
   $('sendBtn').addEventListener('click', submitSay);
   $('micBtn').addEventListener('click', toggleMic);
   $('log').addEventListener('scroll', () => {
@@ -1338,6 +1348,10 @@
     if (ui.pinned) $('jumpBtn').hidden = true;
   });
   $('jumpBtn').addEventListener('click', () => { ui.pinned = true; scrollLogDown(); });
+  // The feed is resized by the status cards under it: stay on the newest line when pinned.
+  if (typeof ResizeObserver === 'function') {
+    try { new ResizeObserver(() => { if (ui.pinned && $('log').clientHeight > 0) scrollLogDown(); }).observe($('log')); } catch (e) { /* optional */ }
+  }
 
   const gesture = () => { if (!gestured) { gestured = true; A.call('unlock'); } };
   ['pointerdown', 'keydown', 'touchstart'].forEach((t) => document.addEventListener(t, gesture, { passive: true }));

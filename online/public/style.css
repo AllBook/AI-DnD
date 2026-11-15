@@ -102,9 +102,13 @@ body.playing .wrap { height: 100vh; height: 100dvh; padding-block: 10px 12px; }
 body.playing .game { flex: 1 1 0; min-height: 0; align-items: stretch; grid-template-rows: minmax(0, 1fr); }
 body.playing .col-main { min-height: 0; overflow-y: auto; }
 body.playing .col-side { min-height: 0; overflow-y: auto; padding-right: 2px; }
-body.playing .logbox { flex: 1 1 200px; min-height: 200px; }
+/* The feed takes the spare height but never shrinks under its own status cards; if a roll card,
+   the DM timer and the queue all show at once the column scrolls and the composer stays pinned. */
+body.playing .logbox { flex: 1 0 auto; height: auto; }
+body.playing .log-wrap { flex: 1 0 180px; }
 body.playing .dock { flex: none; max-height: 46%; overflow-y: auto; }
-body.playing .scene, body.playing .composer { flex: none; }
+body.playing .scene { flex: none; }
+body.playing .composer { flex: none; position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -10px 14px -8px var(--ink); }
 
 .scene { padding-block: 10px; }
 .scene-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -156,7 +160,7 @@ body.playing .scene, body.playing .composer { flex: none; }
 button.big { font-size: 1.1rem; padding: 12px 18px; }
 .sub { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .sub textarea { width: 100%; }
-.classes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.classes { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
 .cls { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 12px; background: var(--ink); min-width: 0; }
 .cls.sel { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass); }
 .cls b { font-family: var(--font-display); font-weight: 400; font-size: 1.25rem; color: var(--brass); }
@@ -249,7 +253,7 @@ button.big { font-size: 1.1rem; padding: 12px 18px; }
 .modes button:focus-visible { outline-offset: -3px; }
 .modes button[aria-checked="true"]:focus-visible { outline-color: var(--brass-ink); }
 .say { display: flex; gap: 8px; align-items: stretch; }
-.say textarea { flex: 1 1 auto; min-width: 0; resize: none; min-height: 3.4em; }
+.say textarea { flex: 1 1 auto; min-width: 0; resize: none; min-height: 4.6em; max-height: 150px; }
 .say-btns { display: flex; flex-direction: column; gap: 6px; justify-content: flex-end; }
 .say-btns button { min-width: 4.2em; }
 .mic.on { border-color: var(--blood); color: var(--blood); }
@@ -306,7 +310,8 @@ dialog::backdrop { background: rgba(6, 9, 11, .72); }
 fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 legend { font-family: var(--font-display); color: var(--brass); padding: 0 6px; font-size: 1.05rem; }
 .slider { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); align-items: center; gap: 10px; }
-.check-row, label.check { display: flex; align-items: center; gap: 8px; border: 0; padding: 0; background: none; }
+.tick { display: flex; align-items: flex-start; gap: 8px; }
+.tick input { flex: none; margin-top: .2em; }
 .prose ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
 .prose code { background: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
 
@@ -344,7 +349,13 @@ body.busy .dock button, body.busy .inv button, body.busy .lobby button, body.bus
   .game[data-tab="journal"] [data-pane]:not([data-pane="journal"]) { display: none; }
   .col-main, .col-side { gap: 8px; }
   body.playing .col-main, body.playing .col-side { flex: 1 1 0; }
-  body.playing .logbox { flex-basis: 170px; min-height: 170px; }
+  body.playing .log-wrap { flex-basis: 120px; }
+  body.playing.combat .log-wrap { flex-basis: 92px; }
+  .wide { display: none; }
+  .foe .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 1px; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chipbtn { flex: none; white-space: nowrap; max-width: 80vw; overflow: hidden; text-overflow: ellipsis; }
   .scene, .lobby, .logbox, .dock, .composer, .col-side > section { padding: 10px 12px; }
   .scene { padding-block: 8px; }
   .scene-head h2 { font-size: 1.25rem; }
@@ -355,14 +366,23 @@ body.busy .dock button, body.busy .inv button, body.busy .lobby button, body.bus
   .dock .btns button { padding: 7px 10px; }
   .classes { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .logbox { height: 260px; }
-  .say textarea { min-height: 3.2em; }
+  .say { align-items: flex-end; }
+  .say textarea { min-height: 0; }
+  .say-btns { flex-direction: row; }
+  .say-btns button { min-width: 0; padding: 8px 12px; }
+}
+@media (max-width: 480px) {
+  .join-row .primary { flex: 1 1 100%; }
+  .join-row .or { flex: 1 1 100%; text-align: center; font-size: .9rem; }
 }
 /* very short windows: let the page scroll instead of squeezing the feed */
 @media (max-height: 520px) {
   body.playing .wrap { height: auto; }
   body.playing .col-main, body.playing .col-side { overflow: visible; }
-  body.playing .logbox { flex: none; height: 300px; }
+  body.playing .logbox { flex: none; }
+  body.playing .log-wrap { flex: none; height: 240px; }
   body.playing .dock { max-height: none; }
+  body.playing .composer { position: static; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

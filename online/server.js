@@ -48,6 +48,7 @@ const STATIC = {
   '/app.js': ['public/app.js', 'text/javascript; charset=utf-8'],
   '/net.js': ['public/net.js', 'text/javascript; charset=utf-8'],
   '/audio.js': ['public/audio.js', 'text/javascript; charset=utf-8'],
+  '/table.js': ['public/table.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8'],
   '/engine.js': ['engine.js', 'text/javascript; charset=utf-8'],
   '/dm.js': ['dm.js', 'text/javascript; charset=utf-8'],

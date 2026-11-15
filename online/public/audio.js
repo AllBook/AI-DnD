@@ -226,15 +226,15 @@
     dice: function (c, to, t) {
       var n = 6 + (Math.random() * 3 | 0), i, at = t;
       for (i = 0; i < n; i++) {
-        burst(c, to, { kind: 'white', f: rnd(1800, 4200), q: 3, t: at, dur: 0.03, gain: 0.5 * rnd(0.5, 1), attack: 0.001 });
-        tone(c, to, { type: 'triangle', f: rnd(300, 520), t: at, dur: 0.03, gain: 0.07, attack: 0.001 });
+        burst(c, to, { kind: 'white', f: rnd(1800, 4200), q: 3, t: at, dur: 0.03, gain: 0.9 * rnd(0.5, 1), attack: 0.001 });
+        tone(c, to, { type: 'triangle', f: rnd(300, 520), t: at, dur: 0.03, gain: 0.15, attack: 0.001 });
         at += 0.04 + i * 0.012 + Math.random() * 0.02;
       }
-      burst(c, to, { kind: 'white', f: 1200, q: 2, t: at + 0.03, dur: 0.07, gain: 0.6, attack: 0.001 });
+      burst(c, to, { kind: 'white', f: 1200, q: 2, t: at + 0.03, dur: 0.07, gain: 0.9, attack: 0.001 });
       tone(c, to, { f: 230, f1: 140, t: at + 0.03, dur: 0.1, gain: 0.2, attack: 0.002 });
     },
     hit: function (c, to, t) {
-      tone(c, to, { f: 170, f1: 45, t: t, dur: 0.26, gain: 0.7, attack: 0.002 });
+      tone(c, to, { f: 170, f1: 45, t: t, dur: 0.26, gain: 0.55, attack: 0.002 });
       burst(c, to, { kind: 'white', ftype: 'lowpass', f: 2200, q: 0.7, t: t, dur: 0.13, gain: 0.4, attack: 0.001 });
       burst(c, to, { kind: 'white', f: 3500, q: 1.5, t: t, dur: 0.04, gain: 0.25, attack: 0.001 });
     },
@@ -263,8 +263,8 @@
       tone(c, to, { f: 1760, t: t + 0.14, dur: 0.4, gain: 0.03, attack: 0.006 });
     },
     notify: function (c, to, t) {
-      tone(c, to, { f: 987.77, t: t, dur: 0.35, gain: 0.12, attack: 0.006 });
-      tone(c, to, { f: 1318.5, t: t + 0.11, dur: 0.5, gain: 0.1, attack: 0.006 });
+      tone(c, to, { f: 987.77, t: t, dur: 0.35, gain: 0.16, attack: 0.006 });
+      tone(c, to, { f: 1318.5, t: t + 0.11, dur: 0.5, gain: 0.14, attack: 0.006 });
     },
     send: function (c, to, t) {
       tone(c, to, { f: 420, f1: 780, t: t, dur: 0.1, gain: 0.09, attack: 0.012 });
@@ -411,7 +411,8 @@
     src.onended = function () { try { g.disconnect(); } catch (e) { /* ignore */ } };
   }
 
-  var LEVEL = { tavern: 1, town: 1, forest: 1, cave: 1, dungeon: 1, crypt: 1, mountain: 1, storm: 1, camp: 1, combat: 1 };
+  // Per-scene trim so that every soundscape sits at a similar loudness under the ambience slider.
+  var LEVEL = { tavern: 1.7, town: 2.4, forest: 2.8, cave: 1, dungeon: 1, crypt: 1, mountain: 1.3, storm: 1, camp: 1.2, combat: 1.2 };
 
   var BUILD = {
     tavern: function (S) {
@@ -471,9 +472,9 @@
     },
     cave: function (S) {
       var c = S.c, wet = S.wet(0.37, 0.5, 1700, 0.5);
-      var dr = S.gain(0.5); S.noise('brown', S.filter('lowpass', 150, 0.7, dr)); S.lfo(0.06, 0.15, dr.gain);
-      var ar = S.gain(0.3), af = S.filter('bandpass', 520, 3, ar);
-      S.noise('pink', af); S.lfo(0.04, 200, af.frequency); S.lfo(0.11, 0.12, ar.gain);
+      var dr = S.gain(0.35); S.noise('brown', S.filter('lowpass', 150, 0.7, dr)); S.lfo(0.06, 0.1, dr.gain);
+      var ar = S.gain(0.4), af = S.filter('bandpass', 520, 3, ar);
+      S.noise('pink', af); S.lfo(0.04, 200, af.frequency); S.lfo(0.11, 0.16, ar.gain);
       S.every(0.7, 3.6, function (t) { drip(S, t, wet, rnd(0.05, 0.12)); }, 0.5);
       S.every(20, 45, function (t) {
         burst(c, S.out, { kind: 'brown', ftype: 'lowpass', f: 110, q: 0.7, t: t, dur: 3, gain: 0.5, attack: 0.8 });
@@ -483,8 +484,8 @@
       var c = S.c, wet = S.wet(0.45, 0.55, 1400, 0.6);
       var dg = S.gain(0.06), df = S.filter('lowpass', 170, 2, dg);
       S.osc('sawtooth', 55, df); S.osc('sawtooth', 55.6, df); S.lfo(0.05, 55, df.frequency);
-      var sub = S.gain(0.1); S.osc('sine', 36.7, sub); S.lfo(0.08, 0.04, sub.gain);
-      var rm = S.gain(0.3); S.noise('brown', S.filter('lowpass', 230, 0.6, rm)); S.lfo(0.07, 0.1, rm.gain);
+      var sub = S.gain(0.06); S.osc('sine', 36.7, sub); S.lfo(0.08, 0.025, sub.gain);
+      var rm = S.gain(0.24); S.noise('brown', S.filter('lowpass', 230, 0.6, rm)); S.lfo(0.07, 0.08, rm.gain);
       crackle(S, 0.09, 0.6, 0.03);
       S.every(7, 18, function (t) {
         var i, n, f;
@@ -502,13 +503,13 @@
     },
     crypt: function (S) {
       var c = S.c, wet = S.wet(0.53, 0.6, 1100, 0.7);
-      var d1 = S.gain(0.14); S.osc('sine', 41.2, d1); S.osc('sine', 41.55, d1);
+      var d1 = S.gain(0.07); S.osc('sine', 41.2, d1); S.osc('sine', 41.55, d1);
       var d2 = S.gain(0.05); S.osc('sine', 61.7, d2); S.lfo(0.05, 0.03, d2.gain);
       var bed = S.gain(0.18); S.noise('brown', S.filter('lowpass', 200, 0.6, bed));
-      var w1 = S.gain(0.45), f1 = S.filter('bandpass', 720, 9, w1);
-      S.noise('pink', f1); S.lfo(0.06, 340, f1.frequency); S.lfo(0.13, 0.25, w1.gain);
-      var w2 = S.gain(0.3), f2 = S.filter('bandpass', 1500, 12, w2);
-      S.noise('pink', f2, 1.2); S.lfo(0.045, 480, f2.frequency); S.lfo(0.1, 0.18, w2.gain);
+      var w1 = S.gain(0.6), f1 = S.filter('bandpass', 720, 9, w1);
+      S.noise('pink', f1); S.lfo(0.06, 340, f1.frequency); S.lfo(0.13, 0.33, w1.gain);
+      var w2 = S.gain(0.4), f2 = S.filter('bandpass', 1500, 12, w2);
+      S.noise('pink', f2, 1.2); S.lfo(0.045, 480, f2.frequency); S.lfo(0.1, 0.24, w2.gain);
       [[466.2, 0.07], [493.9, 0.11], [698.5, 0.085]].forEach(function (p) {
         var g = S.gain(0.004); S.osc('sine', p[0], g); S.lfo(p[1], 0.004, g.gain);
       });
@@ -1232,7 +1233,6 @@
     if ((m !== mode || dictChanged) && micSession) micFinish(micSession);
     mode = m;
     ttsUrlFn = typeof opts.ttsUrl === 'function' ? opts.ttsUrl : null;
-    if (sfxUrlFn !== opts.sfxUrl) amb.loops = {};
     sfxUrlFn = typeof opts.sfxUrl === 'function' ? opts.sfxUrl : null;
     caps = nc;
     if (ttsChanged) capDenied = false;

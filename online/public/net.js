@@ -19,7 +19,20 @@
   const connSubs = [];
   let connected = null;
   function setConn(ok) { if (ok === connected) return; connected = ok; connSubs.forEach((cb) => { try { cb(ok); } catch (e) { /* ignore */ } }); }
-  const Net = { kind: 'server', caps: { tts: null, dictation: null, downloads: null }, onConn(cb) { connSubs.push(cb); if (connected != null) cb(connected); } };
+  const Net = { kind: 'server', me: null, caps: { tts: null, dictation: null, downloads: null }, onConn(cb) { connSubs.push(cb); if (connected != null) cb(connected); } };
+
+  // Extra listeners for room state (the visual tabletop uses this): cb(room | null, myPlayerId).
+  const roomSubs = [];
+  const emitRoom = (room) => roomSubs.forEach((cb) => { try { cb(room, Net.me); } catch (e) { /* a listener must never break the game */ } });
+  Net.onRoom = (cb) => { roomSubs.push(cb); };
+  function wrap() {
+    const { create, join, listen, stop } = Net;
+    const seat = (r) => { if (r && r.playerId) Net.me = r.playerId; return r; };
+    Net.create = async (name) => seat(await create(name));
+    Net.join = async (code, name, token) => seat(await join(code, name, token));
+    Net.listen = (session, onState, onLost) => listen(session, (room) => { onState(room); emitRoom(room); }, onLost);
+    Net.stop = () => { stop(); emitRoom(null); };
+  }
 
   // ---------------------------------------------------------------- server
 
@@ -47,6 +60,7 @@
       ttsUrl: (entryId, seg) => (creds ? `/api/tts?code=${encodeURIComponent(creds.code)}&token=${encodeURIComponent(creds.token)}&entry=${encodeURIComponent(entryId)}&seg=${encodeURIComponent(seg)}` : null),
       sfxUrl: (name) => `/api/sfx?name=${encodeURIComponent(name)}`,
     });
+    wrap();
     return Promise.resolve();
   }
 
@@ -195,6 +209,7 @@
       ttsUrl: () => null,
       sfxUrl: () => null,
     });
+    wrap();
   }
 
   Net.ready = (window.claude && typeof window.claude.use === 'function' ? useArtifact(window.claude) : useServer());
