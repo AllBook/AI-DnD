@@ -172,6 +172,11 @@ function party() {
   assert.ok(E.act(room, 'a', { t: 'interact', x: 1, y: 4 }).ok, 'loot the cellar chest');
   assert.ok(m.objects.find((o) => o.kind === 'chest').used && a.gold >= gold);
   assert.ok(!E.act(room, 'a', { t: 'interact', x: 1, y: 4 }).ok, 'a chest is looted once');
+  // The exit sits on the front doorway: using it leads on, it does not close the door, and nobody spawns on it.
+  const exit = m.objects.find((o) => o.kind === 'exit');
+  assert.ok(!Object.values(room.players).some((q) => q.pos.x === exit.x && q.pos.y === exit.y), 'no hero spawns on the exit');
+  assert.ok(E.act(room, 'b', { t: 'interact', x: exit.x, y: exit.y }).ok && m.tiles[exit.y][exit.x] === "'" && room.dm.queue.some((q) => /onward/.test(q.text)));
+  room.dm.queue = room.dm.queue.filter((q) => !/onward/.test(q.text));
   // Examining a feature asks the DM.
   const board = m.objects.find((o) => o.name === 'Notice board');
   assert.ok(E.act(room, 'b', { t: 'interact', x: board.x, y: board.y }).ok && room.dm.queue.some((q) => /examines the Notice board/.test(q.text)));

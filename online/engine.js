@@ -245,11 +245,18 @@
   }
   const centre = (room) => { const ps = players(room).filter((p) => p.pos); return ps.length ? ps[0].pos : (room.map ? room.map.spawn : { x: 0, y: 0 }); };
 
+  /** Squares heroes should not be dropped onto: props, exits and doorways. */
+  function noDrop(room) {
+    const t = blockers(room).all;
+    room.map.objects.forEach((o) => t.add(Maps.key(o.x, o.y)));
+    room.map.tiles.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === "'") t.add(Maps.key(x, y)); });
+    return t;
+  }
   function placeParty(room) {
     const m = room.map;
     if (!m) return;
     players(room).forEach((p) => { delete p.pos; });
-    const spots = Maps.freeNear(m, m.spawn, blockers(room).all, players(room).length);
+    const spots = Maps.freeNear(m, m.spawn, noDrop(room), players(room).length);
     players(room).forEach((p, i) => { p.pos = spots[i] || { x: m.spawn.x, y: m.spawn.y }; });
     Maps.reveal(m, players(room).map((p) => p.pos));
   }
@@ -258,7 +265,7 @@
     if (!m || (room.phase !== 'scene' && room.phase !== 'combat')) return;
     const missing = players(room).filter((p) => !p.pos || !Maps.inb(m, p.pos.x, p.pos.y));
     if (!missing.length) return;
-    const spots = Maps.freeNear(m, centre(room), blockers(room).all, missing.length);
+    const spots = Maps.freeNear(m, centre(room), noDrop(room), missing.length);
     missing.forEach((p, i) => { p.pos = spots[i] || { x: m.spawn.x, y: m.spawn.y }; });
     Maps.reveal(m, missing.map((p) => p.pos));
   }
@@ -359,7 +366,8 @@
     const combat = room.phase === 'combat';
     if (combat) { if (!inCombatTurn(room, p)) return 'Wait for your turn.'; } else if (room.phase !== 'scene') return 'Not right now.';
     const tile = Maps.at(m, x, y);
-    if (tile === '+' || tile === "'") {
+    const here = m.objects.find((o) => o.x === x && o.y === y);
+    if (!here && (tile === '+' || tile === "'")) {
       const err = approach(room, p, { x, y }, 1, 'the door');
       if (err) return err;
       if (tile === "'") {
