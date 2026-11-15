@@ -106,6 +106,26 @@
     '@keyframes tk-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}',
     '@keyframes tk-speak{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}',
     '@keyframes tk-ripple{from{transform:scale(.95);opacity:.9}to{transform:scale(1.45);opacity:0}}',
+    /* hero portraits, companions, conditions and death saves */
+    '.tk-ally .tk-name{color:#cfe8c6;box-shadow:0 0 0 calc(1px*var(--inv,1)) rgba(119,176,108,.7)}',
+    '.tt-scene .tk-ally{cursor:default}',
+    '.tk.tk-art.is-down .tk-body{filter:grayscale(.45) brightness(.78)}',
+    '.tk.is-down.st-dying::after,.tk.is-down.st-stable::after,.tk.st-dead::after{display:none}',
+    '.tk.st-dying .tk-hp{animation:tk-dying 1.3s ease-in-out infinite}',
+    '@keyframes tk-dying{0%,100%{stroke-opacity:1}50%{stroke-opacity:.25}}',
+    '.tk.st-dead .tk-body{transform:rotate(-14deg) scale(.86);filter:grayscale(1) brightness(.5);opacity:.6}',
+    '.tk-cond{position:absolute;right:calc(-7px*var(--inv,1));top:calc(-5px*var(--inv,1));display:flex;flex-direction:column;gap:calc(1px*var(--inv,1));pointer-events:none}',
+    '.tk-cond i{display:block;width:calc(13px*var(--inv,1));height:calc(13px*var(--inv,1));border-radius:50%;background:#0b0e10;box-shadow:0 0 0 calc(1px*var(--inv,1)) var(--c,#9aa7a4),0 1px 3px rgba(0,0,0,.7)}',
+    '.tk-cond svg{display:block;width:100%;height:100%}',
+    '.tk-saves{position:absolute;left:50%;top:72%;transform:translateX(-50%);display:none;gap:calc(2px*var(--inv,1));padding:calc(2px*var(--inv,1)) calc(4px*var(--inv,1));',
+    'border-radius:999px;background:rgba(10,13,15,.9);box-shadow:0 0 0 calc(1px*var(--inv,1)) rgba(200,73,61,.55);pointer-events:none;z-index:1}',
+    '.tk.st-dying .tk-saves,.tk.st-stable .tk-saves{display:flex}',
+    '.tk.st-stable .tk-saves{box-shadow:0 0 0 calc(1px*var(--inv,1)) rgba(119,176,108,.7)}',
+    '.tk-saves b{display:block;width:calc(5px*var(--inv,1));height:calc(5px*var(--inv,1));border-radius:50%;border:calc(1px*var(--inv,1)) solid #77b06c}',
+    '.tk-saves b.f{border-color:#c8493d}.tk-saves b.on{background:#77b06c}.tk-saves b.f.on{background:#c8493d}',
+    '.tk-saves s{display:block;width:calc(1px*var(--inv,1));background:#3b4a52;text-decoration:none}',
+    '.tk-skull{position:absolute;left:50%;top:50%;width:46%;height:46%;transform:translate(-50%,-55%);display:none;pointer-events:none;filter:drop-shadow(0 1px 2px #000)}',
+    '.tk.st-dead .tk-skull{display:block}',
     '.ob{border-radius:8px}',
     '.ob-name{opacity:0}',
     '.ob-exit .ob-name,.ob:hover .ob-name,.ob:focus-visible .ob-name,.ob.show .ob-name{opacity:1}',
@@ -1556,6 +1576,79 @@
     const a = CLASS_ART[cls] || { face: '#5b6a73', fg: '#f6eedb' };
     return tokenSvg({ face: a.face, rim: '#c9b98a', glyph: (GLYPH[cls] || GLYPH.hero)(a.fg) });
   }
+  // A hero's own portrait (window.CharacterFigure) inside the token rim; the class glyph when the
+  // figure script is missing. The SVG data URL is cached per look + gear + pose, so it is built once.
+  const figCache = new Map();
+  const figure = () => (typeof window.CharacterFigure === 'object' && window.CharacterFigure && typeof window.CharacterFigure.dataUrl === 'function' ? window.CharacterFigure : null);
+  function heroKey(p, pose) {
+    const CF = figure();
+    if (!CF) return 'g:' + String(p.cls);
+    let k;
+    try { k = JSON.stringify([CF.version, p.race || '', p.cls || '', p.look || null, p.eq || null, pose]); } catch (e) { k = String(p.cls); }
+    return 'f:' + k;
+  }
+  function heroPortrait(p, key, pose) {
+    const CF = figure();
+    if (!CF) return heroArt(p.cls);
+    let url = figCache.get(key);
+    if (url == null) {
+      try { url = CF.dataUrl({ race: p.race, cls: p.cls, look: p.look, eq: p.eq }, { view: 'token', rim: false, size: 96, pose: pose }); } catch (e) { url = ''; }
+      if (figCache.size > 80) figCache.clear();
+      figCache.set(key, url);
+    }
+    if (!url || !/^data:image\/svg\+xml/.test(url)) return heroArt(p.cls);
+    const a = CLASS_ART[p.cls] || { face: '#5b6a73' };
+    // tokenSvg with the face disc swapped for the portrait image (the HP ring and rim stay the same)
+    return tokenSvg({ face: a.face, rim: '#c9b98a', glyph: '' }).replace('<g transform="translate(17 17) scale(1.25)"></g>',
+      '<image href="' + url.replace(/"/g, '%22') + '" x="7.8" y="7.8" width="48.4" height="48.4" preserveAspectRatio="xMidYMid slice"/>' +
+      '<circle cx="32" cy="32" r="24.2" fill="none" stroke="#0b0e10" stroke-width="1.2"/>');
+  }
+  function allyArt() {
+    return tokenSvg({ face: '#2f4a37', rim: '#77b06c', glyph: GLYPH.npc('#e3efd9') });
+  }
+  // condition badges: entries of fx are {k, v, t}
+  const COND = {
+    poison: { n: 'Poisoned', c: '#6fcf5a', s: '<path d="M6 1.6C4.4 4.2 3 5.8 3 7.6a3 3 0 0 0 6 0C9 5.8 7.6 4.2 6 1.6Z" fill="#6fcf5a"/>' },
+    fear: { n: 'Frightened', c: '#b07cff', s: '<path d="M6 2C3.6 2 2.4 3.6 2.4 5.6c0 1.3.7 2.2 1.6 2.7V10h4V8.3c.9-.5 1.6-1.4 1.6-2.7C9.6 3.6 8.4 2 6 2Z" fill="#b07cff"/><circle cx="4.6" cy="5.8" r="1" fill="#0b0e10"/><circle cx="7.4" cy="5.8" r="1" fill="#0b0e10"/>' },
+    prone: { n: 'Prone', c: '#d9b36a', s: '<path d="M6 2V9M3 6.4L6 9.6L9 6.4" fill="none" stroke="#d9b36a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>' },
+    blind: { n: 'Blinded', c: '#cfd6db', s: '<path d="M1.6 6C3 3.8 4.4 3 6 3s3 .8 4.4 3C9 8.2 7.6 9 6 9S3 8.2 1.6 6Z" fill="none" stroke="#cfd6db" stroke-width="1.1"/><circle cx="6" cy="6" r="1.3" fill="#cfd6db"/><path d="M2.2 10L9.8 2" stroke="#e2503f" stroke-width="1.4" stroke-linecap="round"/>' },
+    stun: { n: 'Stunned', c: '#ffd36b', s: '<path d="M4 1.8L4.6 3.4L6.2 4L4.6 4.6L4 6.2L3.4 4.6L1.8 4L3.4 3.4ZM8.2 5L8.8 6.6L10.4 7.2L8.8 7.8L8.2 9.4L7.6 7.8L6 7.2L7.6 6.6Z" fill="#ffd36b"/>' },
+    slow: { n: 'Slowed', c: '#7fc8ff', s: '<path d="M3 2.4H9M3 9.6H9M3.6 2.4C3.6 5 8.4 7 8.4 9.6M8.4 2.4C8.4 5 3.6 7 3.6 9.6" fill="none" stroke="#7fc8ff" stroke-width="1.2" stroke-linecap="round"/>' },
+    str: { n: 'Empowered', c: '#ff8a4a', s: '<path d="M6 2V10M2.8 5.2L6 2L9.2 5.2" fill="none" stroke="#ff8a4a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' },
+    guard: { n: 'Guarded', c: '#8fb3e8', s: '<path d="M6 1.6L9.6 3V6C9.6 8.2 8 9.6 6 10.4C4 9.6 2.4 8.2 2.4 6V3Z" fill="#8fb3e8"/>' },
+    invuln: { n: 'Invulnerable', c: '#ffd36b', s: '<path d="M6 1.6L9.6 3V6C9.6 8.2 8 9.6 6 10.4C4 9.6 2.4 8.2 2.4 6V3Z" fill="#ffd36b"/><path d="M6 3.6V8.4M4 5.6H8" stroke="#7a5712" stroke-width="1.1"/>' },
+    exposed: { n: 'Exposed', c: '#e2503f', s: '<path d="M6 1.6L9.6 3V6C9.6 8.2 8 9.6 6 10.4C4 9.6 2.4 8.2 2.4 6V3Z" fill="none" stroke="#e2503f" stroke-width="1.1"/><path d="M6.4 2.4L5 5.4L7 6.4L5.6 9.4" fill="none" stroke="#e2503f" stroke-width="1.2" stroke-linejoin="round"/>' },
+  };
+  const SKULL_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2.5C7 2.5 3.8 6 3.8 10.6C3.8 13.6 5.2 15.6 7.4 16.8V20.8H16.6V16.8C18.8 15.6 20.2 13.6 20.2 10.6C20.2 6 17 2.5 12 2.5Z" fill="#e9e3d2" stroke="#0b0e10" stroke-width="1.2"/>' +
+    '<circle cx="8.6" cy="10.8" r="2.5" fill="#14181b"/><circle cx="15.4" cy="10.8" r="2.5" fill="#14181b"/><path d="M12 12.8L13.3 15.6H10.7Z" fill="#14181b"/><path d="M9.8 17.6V20.8M12 17.6V20.8M14.2 17.6V20.8" stroke="#14181b" stroke-width="1"/></svg>';
+  function condList(c) {
+    const out = [];
+    (Array.isArray(c && c.fx) ? c.fx : []).forEach((f) => { if (f && COND[f.k] && out.indexOf(f.k) < 0) out.push(f.k); });
+    return out;
+  }
+  function setConds(t, list) {
+    put(t, 'cond', list.join(','), () => {
+      t.cond.textContent = '';
+      list.slice(0, 4).forEach((k) => {
+        const i = el('i');
+        i.style.setProperty('--c', COND[k].c);
+        i.title = COND[k].n;
+        i.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">' + COND[k].s + '</svg>';
+        t.cond.appendChild(i);
+      });
+    });
+  }
+  const condText = (list) => (list.length ? ', ' + list.map((k) => COND[k].n.toLowerCase()).join(', ') : '');
+  function setSaves(t, dy) {
+    const s = dy ? Math.max(0, Math.min(3, num(dy.s))) : 0, f = dy ? Math.max(0, Math.min(3, num(dy.f))) : 0;
+    put(t, 'saves', dy ? s + '/' + f : '', () => {
+      t.saves.textContent = '';
+      if (!dy) return;
+      for (let i = 0; i < 3; i++) { const b = el('b', i < s ? 'on' : ''); t.saves.appendChild(b); }
+      t.saves.appendChild(el('s'));
+      for (let i = 0; i < 3; i++) { const b = el('b', 'f' + (i < f ? ' on' : '')); t.saves.appendChild(b); }
+    });
+  }
   function foeType(e) {
     if (e.type && FOE_ART[e.type]) return e.type;
     const n = String(e.name || '').toLowerCase();
@@ -1820,9 +1913,16 @@
     node.type = 'button';
     node.tabIndex = -1;
     const shk = el('span', 'tk-shk'), body = el('span', 'tk-body'), tag = el('span', 'tk-tag'), name = el('span', 'tk-name');
+    const cond = el('span', 'tk-cond'), saves = el('span', 'tk-saves');
     shk.appendChild(body);
-    node.appendChild(shk); node.appendChild(tag); node.appendChild(name);
-    const t = { kind, id, el: node, body, name, tag, hp: null, c: {}, px: null, py: null, path: [], floats: 0, gone: false };
+    node.appendChild(shk); node.appendChild(tag); node.appendChild(name); node.appendChild(cond);
+    if (kind === 'hero') {
+      const skull = el('span', 'tk-skull');
+      skull.innerHTML = SKULL_SVG;
+      shk.appendChild(skull);
+      node.appendChild(saves);
+    }
+    const t = { kind, id, el: node, body, name, tag, cond, saves, hp: null, c: {}, px: null, py: null, path: [], floats: 0, gone: false };
     node.addEventListener('click', (ev) => { ev.stopPropagation(); if (S.dragged) return; tokenClick(t); });
     elTokens.appendChild(node);
     setTimeout(() => node.classList.remove('tk-in'), 700);
@@ -1987,13 +2087,21 @@
       let t = tokens.get(key);
       if (!t) { t = makeToken('hero', id); tokens.set(key, t); }
       const down = isDown(p), me = id === S.me, acting = turn === id && !down;
-      setArt(t, String(p.cls), heroArt(p.cls));
+      const dead = !!p.dead, dy = !dead && down && p.dying && typeof p.dying === 'object' ? p.dying : null, stable = !!(dy && dy.stable);
+      const pose = down ? 'down' : 'idle', akey = heroKey(p, pose);
+      setArt(t, akey, heroPortrait(p, akey, pose));
+      flag(t, 'tk-art', akey.charAt(0) === 'f');
       setSize(t, 0.84);
       put(t, 'name', String(p.name || 'Hero'), (v) => { t.name.textContent = v; });
       setHp(t, num(p.hp), num(p.maxHp));
       flag(t, 'is-me', me); flag(t, 'is-down', down); flag(t, 'is-off', p.online === false); flag(t, 'is-turn', acting);
+      flag(t, 'st-dead', dead); flag(t, 'st-dying', !!dy && !stable); flag(t, 'st-stable', stable);
+      setSaves(t, dy);
+      const conds = dead ? [] : condList(p);
+      setConds(t, conds);
       put(t, 'tag', acting ? (me ? 'Your turn' : 'Turn') : '', (v) => { t.tag.textContent = v; });
-      t.label = (p.name || 'Hero') + ', ' + p.cls + (p.level ? ' level ' + p.level : '') + ', HP ' + num(p.hp) + ' of ' + num(p.maxHp) + (me ? ', you' : '') + (down ? ', down' : '') + (acting ? ', acting now' : '');
+      const state = dead ? ', dead' : stable ? ', down but stable' : dy ? ', dying, death saves ' + num(dy.s) + ' succeeded and ' + num(dy.f) + ' failed' : down ? ', down' : '';
+      t.label = (p.name || 'Hero') + ', ' + (p.race ? p.race + ' ' : '') + p.cls + (p.level ? ' level ' + p.level : '') + ', HP ' + num(p.hp) + ' of ' + num(p.maxHp) + (me ? ', you' : '') + state + condText(conds) + (acting ? ', acting now' : '');
       put(t, 'label', t.label, (v) => t.el.setAttribute('aria-label', v));
       t.tile = { x: p.pos.x, y: p.pos.y };
       moveTo(t, p.pos.x, p.pos.y, first || t.px == null);
@@ -2015,9 +2123,34 @@
         flag(t, 'is-dead', dead); flag(t, 'is-boss', !!e.boss);
         put(t, 'dis', dead, (v) => { t.el.disabled = v; });
         t.dead = dead;
-        t.base = (e.name || e.type || 'Enemy') + (e.boss ? ', boss' : '') + (dead ? ', defeated' : ', HP ' + num(e.hp) + ' of ' + num(e.maxHp));
+        const conds = dead ? [] : condList(e);
+        setConds(t, conds);
+        t.base = (e.name || e.type || 'Enemy') + (e.boss ? ', boss' : '') + (dead ? ', defeated' : ', HP ' + num(e.hp) + ' of ' + num(e.maxHp)) + condText(conds);
         t.tile = { x: e.pos.x, y: e.pos.y };
         moveTo(t, e.pos.x, e.pos.y, first || t.px == null);
+      });
+    }
+    // companions who fight beside the party (friendly, not a target)
+    if (combat && Array.isArray(combat.allies)) {
+      combat.allies.forEach((a) => {
+        if (!a || a.id == null || !a.pos) return;
+        const key = 'a:' + String(a.id);
+        if (want.has(key)) return;
+        want.add(key);
+        let t = tokens.get(key);
+        if (!t) { t = makeToken('ally', String(a.id)); tokens.set(key, t); }
+        const dead = a.alive === false || num(a.hp) <= 0;
+        setArt(t, 'ally', allyArt());
+        setSize(t, 0.8);
+        put(t, 'name', String(a.name || 'Companion'), (v) => { t.name.textContent = v; });
+        setHp(t, num(a.hp), num(a.maxHp));
+        flag(t, 'is-dead', dead);
+        const conds = dead ? [] : condList(a);
+        setConds(t, conds);
+        t.dead = dead;
+        put(t, 'label', (a.name || 'Companion') + ', companion' + (dead ? ', fallen' : ', HP ' + num(a.hp) + ' of ' + num(a.maxHp)) + condText(conds), (v) => t.el.setAttribute('aria-label', v));
+        t.tile = { x: a.pos.x, y: a.pos.y };
+        moveTo(t, a.pos.x, a.pos.y, first || t.px == null);
       });
     }
     // people in the scene
@@ -2389,6 +2522,7 @@
 
   function tokenClick(t) {
     if (t.kind === 'foe') return clickFoe(t.id);
+    if (t.kind === 'ally') return;
     if (t.kind === 'hero') {
       // a hero standing on a door, exit or chest: outside a fight the click uses the thing beneath
       if (!S.battle && t.tile && (thingsAt(t.tile.x, t.tile.y).obj)) return clickTile(t.tile.x, t.tile.y, true);
