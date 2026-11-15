@@ -43,13 +43,6 @@
   </section>
 
   <main class="game" id="gameView" data-tab="story" hidden>
-    <nav class="tabs" id="tabs" aria-label="Sections">
-      <button type="button" data-tab="story" aria-pressed="true">Story</button>
-      <button type="button" data-tab="party" aria-pressed="false">Party</button>
-      <button type="button" data-tab="pack" aria-pressed="false">Pack</button>
-      <button type="button" data-tab="journal" aria-pressed="false">Journal</button>
-    </nav>
-
     <div class="col-main" data-pane="story">
       <section class="scene" id="sceneBox">
         <div class="scene-head">
@@ -61,16 +54,25 @@
 
       <section class="lobby" id="lobby" hidden></section>
 
-      <section class="logbox">
-        <div class="log-wrap">
-          <div class="log" id="log" role="log" aria-live="polite" aria-label="Story feed" tabindex="0"></div>
-          <button class="jump" id="jumpBtn" type="button" hidden>New messages</button>
-        </div>
-        <div class="dmbox" id="dmBox"></div>
-      </section>
-
       <section class="dock actions" id="dock" hidden></section>
+    </div>
 
+    <aside class="col-side">
+      <nav class="tabs" id="tabs" aria-label="Sections">
+        <button type="button" data-tab="story" aria-pressed="true">Story</button>
+        <button type="button" data-tab="party" aria-pressed="false">Party</button>
+        <button type="button" data-tab="pack" aria-pressed="false">Pack</button>
+        <button type="button" data-tab="journal" aria-pressed="false">Journal</button>
+      </nav>
+      <div class="pane-story" data-pane="story">
+        <section class="logbox">
+          <div class="log-wrap">
+            <div class="log" id="log" role="log" aria-live="polite" aria-label="Story feed" tabindex="0"></div>
+            <button class="jump" id="jumpBtn" type="button" hidden>New messages</button>
+          </div>
+          <div class="dmbox" id="dmBox"></div>
+        </section>
+      </div>
       <section class="composer" id="composer">
         <div class="chips" id="chips" aria-label="Suggested actions"></div>
         <div class="modes" id="modes" role="radiogroup" aria-label="Message type">
@@ -88,9 +90,6 @@
         </div>
         <p class="note" id="sayNote" role="alert"></p>
       </section>
-    </div>
-
-    <aside class="col-side">
       <section data-pane="party">
         <h3>The party</h3>
         <div class="party" id="party"></div>
