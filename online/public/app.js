@@ -1010,7 +1010,11 @@
     const lobby = state.phase === 'lobby';
     const on = lobby || (!!p && !p.cls);
     box.hidden = !on;
-    if (!on) { delete sigs.lobbyTop; delete sigs.lobby; delete sigs.cc; cc.open = false; cc.d = null; return; }
+    if (!on) {
+      if (box.firstChild) box.replaceChildren();
+      delete sigs.lobbyTop; delete sigs.lobby; delete sigs.cc; cc.open = false; cc.d = null;
+      return;
+    }
     if (!$('ccBox') || !box.contains($('ccBox'))) {
       box.replaceChildren(h('div', { id: 'lobbyTop', class: 'lobby-part' }), h('div', { id: 'ccBox', class: 'lobby-part' }), h('div', { id: 'lobbyRest', class: 'lobby-part' }));
       delete sigs.lobbyTop; delete sigs.lobby; delete sigs.cc;
