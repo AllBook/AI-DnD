@@ -1,0 +1,14 @@
+# Render blueprint for AI-DnD Online (the multiplayer server in ./online).
+# https://render.com/deploy picks this file up from the repository root.
+services:
+  - type: web
+    name: ai-dnd-online
+    runtime: node
+    plan: free
+    rootDir: online
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false

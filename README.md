@@ -14,6 +14,15 @@
 
 ## 🚀 Quick Start (New Features!)
 
+### 🌐 Play Online with Friends
+A co-op multiplayer version with shared party rooms, turn-based combat and an AI Dungeon Master. No dependencies.
+```bash
+cd online
+node server.js
+# Then open http://localhost:3000, create a party and share its code
+```
+See [online/README.md](online/README.md) for how to deploy it.
+
 ### 💬 Try the Standalone Gemini Chat
 Interact directly with the Gemini 2.5 Flash model in a modern, local web interface.
 ```bash

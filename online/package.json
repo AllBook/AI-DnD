@@ -1,0 +1,14 @@
+{
+  "name": "ai-dnd-online",
+  "version": "1.0.0",
+  "description": "Online co-op multiplayer for AI-DnD: shared rooms, turn-based combat, AI Dungeon Master.",
+  "private": true,
+  "license": "MIT",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/sim.js",
+    "build:artifact": "node tools/build-artifact.js"
+  },
+  "engines": { "node": ">=18" }
+}

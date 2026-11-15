@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AI-DnD Online</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700&family=IM+Fell+English+SC&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<!--app-->
+<div class="wrap">
+  <header class="top">
+    <div class="brand">AI-DnD <span>Online</span></div>
+    <div class="top-meta" id="topMeta" hidden>
+      <span class="chip" id="aiChip"></span>
+      <span class="chip" id="connChip"></span>
+      <button class="code" id="codeBtn" type="button" title="Copy invite"></button>
+      <button class="ghost" id="leaveBtn" type="button">Leave</button>
+    </div>
+  </header>
+
+  <section class="join" id="joinView">
+    <h1>Gather your party</h1>
+    <p class="lede">A co-op dungeon crawl for up to six friends, run by an AI Dungeon Master. One of you creates a party, the rest join with its four-letter code.</p>
+    <form class="join-form" id="joinForm" autocomplete="off">
+      <label for="nameInput">Your adventurer's name</label>
+      <input id="nameInput" maxlength="20" placeholder="e.g. Aria" required>
+      <div class="join-row">
+        <button class="primary" id="createBtn" type="button">Create a party</button>
+        <span class="or">or</span>
+        <input id="codeInput" maxlength="4" placeholder="CODE" aria-label="Party code">
+        <button id="joinBtn" type="submit">Join</button>
+      </div>
+      <p class="note" id="joinNote"></p>
+    </form>
+    <p class="lede small" id="modeHint" hidden></p>
+    <ol class="route" aria-label="The road ahead">
+      <li>Thornhaven Village</li><li>Darkwood Forest</li><li>Emberpeak Mine Entrance</li><li>Main Mine Shaft</li><li>Storage Cavern</li><li>Deep Mines</li><li>Ancient Crypt</li>
+    </ol>
+  </section>
+
+  <main class="game" id="gameView" hidden>
+    <div class="col-main">
+      <section class="scene">
+        <div class="scene-head">
+          <h2 id="locName"></h2>
+          <ol class="pips" id="pips" aria-label="Progress"></ol>
+        </div>
+        <div class="foes" id="foes"></div>
+      </section>
+      <section class="actions" id="actions" aria-live="polite"></section>
+      <section class="logbox">
+        <div class="log" id="log" aria-live="polite"></div>
+        <form class="chat" id="chatForm" autocomplete="off">
+          <input id="chatInput" maxlength="240" placeholder="Say something to the party…" aria-label="Message">
+          <label class="askdm" title="Have the Dungeon Master answer"><input type="checkbox" id="askDm"> Ask the DM</label>
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </div>
+    <aside class="col-side">
+      <section>
+        <h3>The party</h3>
+        <div class="party" id="party"></div>
+      </section>
+      <section id="sheetBox">
+        <h3>Your pack</h3>
+        <div class="sheet" id="sheet"></div>
+      </section>
+    </aside>
+  </main>
+  <div class="toast" id="toast" role="status" hidden></div>
+</div>
+<!--/app-->
+<script src="/data.js"></script>
+<script src="/engine.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
