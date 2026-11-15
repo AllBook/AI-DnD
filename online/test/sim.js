@@ -48,7 +48,8 @@ function play(adventure, n) {
       else if (p.cls === 'Cleric' && hurt && p.mana >= 10) a = { t: 'spell', id: 'heal', target: hurt.id };
       else if (p.cls === 'Wizard') { const s = p.spells.filter((id) => E.SPELLS[id].mana_cost <= p.mana && !p.cds['s:' + id]).pop(); if (s) a = { t: 'spell', id: s, target: foes[0].id }; } else { const ab = E.CLASSES[p.cls].abilities.find((id) => !p.cds['a:' + id] && id !== 'heal'); if (ab) a = { t: 'ability', id: ab, target: foes[0].id }; else if (steps % 7 === 0) a = { t: 'attempt', text: 'swing from the rafters', ability: 'DEX', target: foes[0].id }; }
       let r = E.act(room, p.id, a);
-      if (!r.ok) r = E.act(room, p.id, { t: 'attack', target: foes[0].id });
+      if (!r.ok) r = E.act(room, p.id, { t: 'attack' });
+      if (!r.ok) r = E.act(room, p.id, { t: 'endturn' });
       must(r);
       pump(room);
     } else if (room.phase === 'defeat') { defeats++; must(E.act(room, 'p0', { t: 'regroup' })); pump(room); if (defeats > 40) break; }
@@ -145,5 +146,53 @@ function party() {
   assert.ok(!E.act(room, 'b', { t: 'kick', pid: 'a' }).ok);
   assert.ok(E.act(room, 'a', { t: 'kick', pid: 'b' }).ok && !room.players.b && !room.order.includes('b'));
   assert.ok(E.act(room, 'a', { t: 'leave' }).ok && room.order.length === 0);
+}
+{
+  // The map: walking, fog, doors, chests, story features, NPC tokens, voice tags, range.
+  const room = party();
+  const m = room.map;
+  assert.ok(m && m.layout === 'tavern' && m.tiles.length === m.h, 'the adventure opens on a tavern map');
+  const a = room.players.a;
+  assert.ok(a.pos && E.walkable(m, a.pos.x, a.pos.y), 'heroes stand on the map');
+  assert.ok(room.map.objects.some((o) => o.kind === 'npc' && o.name === 'Foreman Garrett'), 'the speaking NPC is on the map');
+  assert.ok(room.map.objects.some((o) => o.kind === 'feature' && o.name === 'Notice board'), 'story features appear on the map');
+  const garrett = room.log.filter((e) => e.k === 'dm').pop().segs[1];
+  assert.ok(garrett.tts && garrett.tts.startsWith('[wearily]') && !garrett.text.includes('['), 'emotion tags go to the voice, not the captions');
+  // Walk somewhere visible, then fail to walk into fog or a wall.
+  const spot = E.reachable(room, 'a')[0];
+  assert.ok(E.act(room, 'a', { t: 'move', x: spot.x, y: spot.y }).ok && a.pos.x === spot.x && a.pos.y === spot.y);
+  assert.ok(!E.act(room, 'a', { t: 'move', x: 0, y: 0 }).ok, 'cannot walk into a wall');
+  assert.ok(m.seen[1][3] === '0', 'the cellar room starts under fog');
+  assert.ok(!E.act(room, 'a', { t: 'move', x: 3, y: 2 }).ok, 'cannot walk into unexplored rooms');
+  // Open the cellar door (x 3, y 5): the hero walks over, the room is revealed, the chest can be looted.
+  assert.ok(E.act(room, 'a', { t: 'interact', x: 3, y: 5 }).ok);
+  assert.strictEqual(m.tiles[5][3], "'");
+  assert.strictEqual(m.seen[1][3], '1', 'opening the door reveals the room');
+  const gold = a.gold;
+  assert.ok(E.act(room, 'a', { t: 'interact', x: 1, y: 4 }).ok, 'loot the cellar chest');
+  assert.ok(m.objects.find((o) => o.kind === 'chest').used && a.gold >= gold);
+  assert.ok(!E.act(room, 'a', { t: 'interact', x: 1, y: 4 }).ok, 'a chest is looted once');
+  // Examining a feature asks the DM.
+  const board = m.objects.find((o) => o.name === 'Notice board');
+  assert.ok(E.act(room, 'b', { t: 'interact', x: board.x, y: board.y }).ok && room.dm.queue.some((q) => /examines the Notice board/.test(q.text)));
+  pump(room);
+  if (room.dm.check) { assert.ok(E.act(room, room.dm.check.pid, { t: 'roll' }).ok); pump(room); }
+  // Combat on the grid: enemies have squares, movement is limited, range is checked.
+  E.act(room, 'a', { t: 'intent', kind: 'do', text: 'pick a fight' });
+  const req = E.dmBegin(room, 'test');
+  if (req) E.dmApply(room, req.seq, { segments: [{ speaker: 'narrator', voice: 'narrator', text: 'Thugs burst in.' }], check: { needed: false }, effects: [], scene: { location: room.scene.location, ambience: 'tavern', shop: false, layout: 'tavern', features: [] }, combat: { start: true, enemies: [{ type: 'Bandit', name: 'Thug', count: 2 }] }, suggestions: [], memory: '' }, { ai: true });
+  assert.strictEqual(room.phase, 'combat');
+  assert.ok(room.combat.enemies.every((e) => e.pos && E.walkable(m, e.pos.x, e.pos.y)), 'enemies stand on the map');
+  const hero = room.players[room.combat.turn];
+  const left = room.combat.left;
+  assert.strictEqual(left, E.speedOf(hero));
+  const far = E.reachable(room, hero.id).sort((p, q) => E.dist(q, hero.pos) - E.dist(p, hero.pos))[0];
+  assert.ok(E.dist(far, hero.pos) <= left, 'reachable squares respect speed');
+  const other = room.order.find((id) => id !== hero.id);
+  assert.ok(!E.act(room, other, { t: 'move', x: far.x, y: far.y }).ok, 'only the acting hero moves in combat');
+  assert.ok(E.rangeOf(room, hero.id, { t: 'attack' }) === 1 && E.rangeOf(room, hero.id, { t: 'ability', id: 'fireball' }) === 8);
+  const r = E.act(room, hero.id, { t: 'attack' });
+  assert.ok(r.ok || /out of reach/.test(r.error), 'attacks walk into range or explain why not');
+  if (!r.ok) assert.ok(E.act(room, hero.id, { t: 'endturn' }).ok);
 }
 console.log('ok');

@@ -22,6 +22,8 @@
   const TIERS = ['minor', 'standard', 'major'];
   const DIFFICULTIES = ['easy', 'medium', 'hard', 'heroic'];
   const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+  const LAYOUTS = ['tavern', 'town', 'docks', 'forest', 'mountain', 'camp', 'cave', 'mine', 'dungeon', 'crypt', 'shore'];
+  const FROM_AMBIENCE = { tavern: 'tavern', town: 'town', forest: 'forest', cave: 'cave', dungeon: 'dungeon', crypt: 'crypt', mountain: 'mountain', storm: 'shore', camp: 'camp' };
   const BESTIARY = ['Goblin', 'Wolf', 'Bandit', 'Cultist', 'Skeleton', 'Spider', 'Orc', 'Wraith', 'Ogre', 'Boss'];
 
   // ---------------------------------------------------------------- adventures
@@ -30,7 +32,7 @@
     {
       id: 'emberpeak', title: 'The Emberpeak Mines',
       blurb: 'Miners have stopped coming home from Emberpeak. Something old has woken under the mountain.',
-      start: { location: 'The Rusty Axe Tavern, Thornhaven', ambience: 'tavern', shop: true },
+      start: { location: 'The Rusty Axe Tavern, Thornhaven', ambience: 'tavern', shop: true, layout: 'tavern', features: ['Notice board'] },
       giver: { name: 'Foreman Garrett', voice: 'gruff' },
       quest: 'Find the missing miners of Emberpeak',
       opening: 'Rain drums on the shutters of the Rusty Axe. At the long table a broad man in a soot-stained coat turns his cap over and over in his hands, and the whole room is pretending not to listen.',
@@ -54,9 +56,9 @@
       stages: [
         { loc: 'Darkwood Forest', ambience: 'forest', foes: [['Goblin', 1, 'p']], intro: 'The road out of Thornhaven narrows under the black boughs of Darkwood. Something chitters in the ferns, and then the goblins are on you.' },
         { loc: 'Emberpeak Mine Entrance', ambience: 'mountain', foes: [['Bandit', 0, 'p'], ['Goblin', 1, '']], intro: 'Timber props frame the mouth of the Emberpeak mine. The toll collectors lounging there are no miners, and they have already drawn steel.' },
-        { loc: 'Main Mine Shaft', ambience: 'cave', foes: [['Goblin', 0, 'p'], ['Orc', 1, '']], keepsake: "Miner's Note", intro: 'Cart rails run down into lamplit dark. A hulking orc drives a goblin work gang, and all of them turn at the sound of your boots.' },
-        { loc: 'Storage Cavern', ambience: 'cave', foes: [['Skeleton', 1, 'p']], intro: 'Crates and barrels, grey with dust. The miners who stacked them never left, and their bones rise rattling from between the shelves.' },
-        { loc: 'Deep Mines', ambience: 'dungeon', foes: [['Orc', 1, ''], ['Bandit', 0, 'p', 'Corrupted Miner']], intro: 'The rock here glows a sick ember red. Miners with coal-black eyes swing their picks at nothing, until they notice you.' },
+        { loc: 'Main Mine Shaft', layout: 'mine', ambience: 'cave', foes: [['Goblin', 0, 'p'], ['Orc', 1, '']], keepsake: "Miner's Note", intro: 'Cart rails run down into lamplit dark. A hulking orc drives a goblin work gang, and all of them turn at the sound of your boots.' },
+        { loc: 'Storage Cavern', layout: 'mine', ambience: 'cave', foes: [['Skeleton', 1, 'p']], intro: 'Crates and barrels, grey with dust. The miners who stacked them never left, and their bones rise rattling from between the shelves.' },
+        { loc: 'Deep Mines', layout: 'mine', ambience: 'dungeon', foes: [['Orc', 1, ''], ['Bandit', 0, 'p', 'Corrupted Miner']], intro: 'The rock here glows a sick ember red. Miners with coal-black eyes swing their picks at nothing, until they notice you.' },
         { loc: 'Ancient Crypt', ambience: 'crypt', foes: [['Boss', 1, '', 'The Rune Warden'], ['Skeleton', -1, 'p']], keepsake: 'Shattered Rune', intro: 'Beyond a broken wall lies a crypt far older than the mine. On its dais the Rune Warden stirs, the shattered rune burning in its ribcage.' },
       ],
       epilogue: 'The Rune Warden collapses into dust and the ember glow drains from the walls. Emberpeak is quiet for the first time in a generation, and the rune is in your hands.',
@@ -64,7 +66,7 @@
     {
       id: 'lighthouse', title: 'The Drowned Lighthouse',
       blurb: 'The Greywater light has gone dark, three ships are on the rocks, and a bell is ringing under the sea.',
-      start: { location: 'Greywater Harbour', ambience: 'town', shop: true },
+      start: { location: 'Greywater Harbour', ambience: 'town', shop: true, layout: 'docks', features: ['Wrecked hull'] },
       giver: { name: 'Harbourmaster Idris Kell', voice: 'noble' },
       quest: 'Relight the Greywater lighthouse',
       opening: 'Gulls wheel over Greywater Harbour, where the wreck of a third ship is being dragged up the shingle plank by plank. Out on its rock the lighthouse stands black against a bruised sky.',
@@ -84,17 +86,17 @@
         'On a still night you can hear a bell out there. There is no bell on that rock.',
       ],
       stages: [
-        { loc: 'Greywater Docks', ambience: 'town', foes: [['Bandit', 0, 'p', 'Wrecker']], intro: 'Lanterns bob between the net sheds. The men unloading a boat with no name see you watching, set down their crates, and reach for their gaffs.' },
+        { loc: 'Greywater Docks', layout: 'docks', ambience: 'town', foes: [['Bandit', 0, 'p', 'Wrecker']], intro: 'Lanterns bob between the net sheds. The men unloading a boat with no name see you watching, set down their crates, and reach for their gaffs.' },
         { loc: 'Tidal Caves', ambience: 'cave', foes: [['Spider', 0, 'p', 'Cave Spider']], intro: 'The tide has drawn back from a black mouth in the rock. Inside, stolen cargo is stacked above the waterline, wrapped in grey silk that is not sailcloth.' },
         { loc: 'The Lighthouse Stair', ambience: 'dungeon', foes: [['Skeleton', 1, 'p', 'Drowned Sailor']], intro: 'Seawater runs down the spiral stair as if the tower were weeping. Shapes in rotted oilskins are climbing ahead of you, and they turn.' },
-        { loc: 'The Lamp Room', ambience: 'storm', foes: [['Boss', 1, '', 'The Bell-Warden'], ['Wraith', -1, 'p', 'Drowned Keeper']], keepsake: "Keeper's Clapper", intro: 'The storm breaks as you reach the lamp room. Beyond the cracked glass something vast hauls itself up the rock, and a bell tolls from inside its chest.' },
+        { loc: 'The Lamp Room', layout: 'shore', ambience: 'storm', foes: [['Boss', 1, '', 'The Bell-Warden'], ['Wraith', -1, 'p', 'Drowned Keeper']], keepsake: "Keeper's Clapper", intro: 'The storm breaks as you reach the lamp room. Beyond the cracked glass something vast hauls itself up the rock, and a bell tolls from inside its chest.' },
       ],
       epilogue: 'The great lamp catches, and its beam sweeps out across the water. Below, the bell gives one last cracked note and is silent. In the harbour, every ship answers with its horn.',
     },
     {
       id: 'caravan', title: 'Caravan to Saltmarch Pass',
       blurb: 'Six wagons, one mountain pass, a bandit queen, and a passenger who is not who they claim to be.',
-      start: { location: 'Fennick\'s Wagon Yard', ambience: 'town', shop: true },
+      start: { location: 'Fennick\'s Wagon Yard', ambience: 'town', shop: true, layout: 'town', features: ['Loaded wagons'] },
       giver: { name: 'Odalric Fenn', voice: 'cheerful' },
       quest: 'Bring the caravan safely over Saltmarch Pass',
       opening: 'Six wagons stand hitched in the yard, mules stamping in the dawn cold. A round merchant in a coat of too many colours is counting barrels for the third time and getting a different number.',
@@ -117,14 +119,14 @@
         { loc: 'The Pine Road', ambience: 'forest', foes: [['Wolf', 1, 'p']], intro: 'Snow begins to fall through the pines. The mules smell them before you see them: grey shapes pacing the wagons, closing in.' },
         { loc: 'The Rope Bridge', ambience: 'mountain', foes: [['Bandit', 0, 'p']], intro: 'The first wagon is halfway across the gorge when a horn sounds. Figures rise from the rocks on both banks with bows drawn.' },
         { loc: 'Avalanche Camp', ambience: 'camp', foes: [['Ogre', 1, ''], ['Goblin', -1, 'p']], intro: 'In the night the mountain shrugs. You dig out by torchlight, and something very large is digging too, from the other side.' },
-        { loc: 'The Toll Fort', ambience: 'dungeon', foes: [['Boss', 1, '', 'Red Ysolde'], ['Bandit', -1, 'p']], keepsake: 'Saltmarch Signet', intro: 'The fort squats across the summit road, its gate standing open. A woman in a red cloak waits in the yard with her sword point resting on the stones.' },
+        { loc: 'The Toll Fort', layout: 'dungeon', ambience: 'dungeon', foes: [['Boss', 1, '', 'Red Ysolde'], ['Bandit', -1, 'p']], keepsake: 'Saltmarch Signet', intro: 'The fort squats across the summit road, its gate standing open. A woman in a red cloak waits in the yard with her sword point resting on the stones.' },
       ],
       epilogue: 'The far side of the pass opens below you, green valleys under the morning. The wagons roll, Odalric counts his barrels again, and for once the number comes out right.',
     },
     {
       id: 'custom', title: 'Your own adventure',
       blurb: 'Write the premise yourselves. The Dungeon Master builds the world around it.',
-      start: { location: 'The Crossroads Inn', ambience: 'tavern', shop: true },
+      start: { location: 'The Crossroads Inn', ambience: 'tavern', shop: true, layout: 'tavern' },
       giver: { name: 'The Innkeeper', voice: 'cheerful' },
       quest: 'Follow the call to adventure',
       opening: 'A fire burns low in the Crossroads Inn, where four roads meet and every traveller has a story. Tonight the story is yours.',
@@ -137,8 +139,8 @@
       ],
       stages: [
         { loc: 'The North Road', ambience: 'forest', foes: [['Goblin', 1, 'p']], intro: 'An hour beyond the inn the road dips through a wooded hollow. The birds have stopped singing, and then you hear why.' },
-        { loc: 'The Ruin on the Hill', ambience: 'dungeon', foes: [['Skeleton', 0, 'p'], ['Cultist', 1, '']], intro: 'Broken walls crown the hill, and firelight moves behind them. Whoever is chanting in there has company that does not breathe.' },
-        { loc: 'The Lair Below', ambience: 'cave', foes: [['Boss', 1, '', 'The Hollow King'], ['Orc', -1, 'p']], intro: 'Steps lead down under the ruin to a cavern hung with trophies. Something that was a king once rises from a throne of roots.' },
+        { loc: 'The Ruin on the Hill', layout: 'crypt', ambience: 'dungeon', foes: [['Skeleton', 0, 'p'], ['Cultist', 1, '']], intro: 'Broken walls crown the hill, and firelight moves behind them. Whoever is chanting in there has company that does not breathe.' },
+        { loc: 'The Lair Below', ambience: 'cave', foes: [['Boss', 1, '', 'The Hollow King'], ['Skeleton', -1, 'p', 'Root-bound Thrall']], intro: 'Steps lead down under the ruin to a cavern hung with trophies. Something that was a king once rises from a throne of roots.' },
       ],
       epilogue: 'Daylight finds you on the hilltop with the ruin silent behind you. Whatever comes next, the roads are open.',
     },
@@ -189,8 +191,8 @@
       effects: { type: 'array', items: EFFECT_SCHEMA },
       scene: {
         type: 'object', additionalProperties: false,
-        properties: { location: str, ambience: { type: 'string', enum: AMBIENCE }, shop: { type: 'boolean' } },
-        required: ['location', 'ambience', 'shop'],
+        properties: { location: str, ambience: { type: 'string', enum: AMBIENCE }, shop: { type: 'boolean' }, layout: { type: 'string', enum: LAYOUTS }, features: { type: 'array', items: str } },
+        required: ['location', 'ambience', 'shop', 'layout', 'features'],
       },
       combat: {
         type: 'object', additionalProperties: false,
@@ -228,6 +230,7 @@
     '- End on something the players can respond to: a choice, a danger, a question from an NPC. Never decide what a player character thinks, says or does beyond what they stated; fill in small roleplay colour when a player was vague.',
     '- "segments" is your reply split by speaker, in order. Narration uses speaker "narrator" and voice "narrator". When an NPC speaks, use a separate segment with the NPC\'s name as speaker, only the spoken words as text (no quotation marks, no "he says"), and a fitting voice: gruff, sage, young, sinister, noble, cheerful, or creature for monsters. Keep one voice per NPC for the whole game. Use at most 5 segments.',
     '- No markdown, no lists, no emoji, no game jargon or numbers in the prose.',
+    '- PERFORMANCE: every segment is read aloud by a voice actor. Write for the ear: varied sentence lengths, rhythm, pauses with ellipses or dashes. You may direct the delivery with audio tags in square brackets placed right before the words they colour, at most two per segment, for example [whispers], [softly], [ominously], [excited], [laughs], [chuckles], [sighs], [gasps], [angry], [shouts], [nervous], [sarcastic], [crying], [pause]. Give NPCs emotion that fits the moment. Tags are performed, never shown or spoken, so never use brackets for anything else.',
     '',
     'CHECKS',
     '- When a character attempts something uncertain and interesting, request ONE check: set check.needed true, name exactly one player character in check.player, choose the ability (STR, DEX, CON, INT, WIS, CHA) and a difficulty (easy, medium, hard, heroic), and give a short reason. Stop your narration at the moment of uncertainty. Write check.success and check.failure: one or two sentences each describing what happens, plus any effects for that branch. Failure should move the story forward with a cost or complication, never a dead end.',
@@ -248,6 +251,11 @@
     'SCENE',
     '- "scene" always states where the party is now: a short location name, the closest ambience from the list, and shop true only while a merchant or market is actually present and willing to trade. Repeat the current values when nothing changed.',
     '',
+    'THE TABLETOP MAP',
+    '- The players see the scene as a top-down map they walk around on. scene.layout picks the map for the location: tavern, town, docks, forest, mountain, camp, cave, mine, dungeon, crypt or shore. A NEW location name with a different layout draws a new map; keep the current layout while the party stays in the same place.',
+    '- scene.features lists up to three notable things you just described that a player could walk up to and interact with, each one to three words ("trapdoor", "notice board", "cracked altar"). They appear on the map as clickable markers. Do not list characters (speaking NPCs appear by themselves) or things already on the map. Use an empty list when nothing new appeared.',
+    '- The state shows what is already on the map (MAP). When a player "examines" a feature, "goes over to talk to" someone or "leads the party onward" through an exit, they clicked it on the map: respond to exactly that.',
+    '',
     'COMBAT',
     '- When a fight breaks out, set combat.start true and list the enemies using types from the BESTIARY (type, a display name that fits the story, and a count). Narrate only the opening moment; the engine then runs the battle turn by turn and tells you how it ended. Offer ways around a fight when the players look for them, and let enemies surrender, flee or bargain when it makes sense. Size fights to the party: usually as many enemies as characters, a Boss only for a climax.',
     '- While MODE is "combat" you are only adding colour or answering questions: do not use check, effects (other than npc, quest and fact), scene changes or combat.',
@@ -261,7 +269,7 @@
     '',
     'OUTPUT',
     'Reply with exactly one JSON object and nothing else, in this shape:',
-    '{"segments":[{"speaker":"narrator","voice":"narrator","text":"..."},{"speaker":"Mira","voice":"cheerful","text":"..."}],"check":{"needed":false,"player":"","ability":"DEX","difficulty":"medium","reason":"","success":{"text":"","effects":[]},"failure":{"text":"","effects":[]}},"effects":[{"type":"quest","target":"","tier":"minor","item":"","name":"Find the missing miners","note":"","mood":"neutral","status":"active"}],"scene":{"location":"The Rusty Axe Tavern","ambience":"tavern","shop":true},"combat":{"start":false,"enemies":[]},"suggestions":["Ask about the mine","Search the cellar"],"memory":""}',
+    '{"segments":[{"speaker":"narrator","voice":"narrator","text":"..."},{"speaker":"Mira","voice":"cheerful","text":"[laughs] ..."}],"check":{"needed":false,"player":"","ability":"DEX","difficulty":"medium","reason":"","success":{"text":"","effects":[]},"failure":{"text":"","effects":[]}},"effects":[{"type":"quest","target":"","tier":"minor","item":"","name":"Find the missing miners","note":"","mood":"neutral","status":"active"}],"scene":{"location":"The Rusty Axe Tavern","ambience":"tavern","shop":true,"layout":"tavern","features":["cellar trapdoor"]},"combat":{"start":false,"enemies":[]},"suggestions":["Ask about the mine","Search the cellar"],"memory":""}',
   ].join('\n');
 
   const line = (s, n) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, n);
@@ -276,6 +284,7 @@
     out.push(`SETTINGS: tone ${view.opts.tone}; difficulty ${view.opts.difficulty}; LANGUAGE ${view.opts.lang}`);
     out.push(`MODE: ${view.mode}`);
     out.push(`SCENE: ${JSON.stringify(view.scene)}`);
+    if (view.map) out.push(`MAP: ${JSON.stringify(view.map)}`);
     out.push(`PARTY: ${JSON.stringify(view.party)}`);
     if (view.combat) out.push(`BATTLE IN PROGRESS: ${JSON.stringify(view.combat)}`);
     out.push(`NPCS: ${JSON.stringify(view.npcs)}`);
@@ -321,7 +330,7 @@
     const next = adv.stages[stage];
     const res = {
       segments: [], check: NO_CHECK(), effects: [],
-      scene: { location: view.scene.location, ambience: view.scene.ambience, shop: !!view.scene.shop },
+      scene: { location: view.scene.location, ambience: view.scene.ambience, shop: !!view.scene.shop, layout: (view.map && view.map.layout) || FROM_AMBIENCE[view.scene.ambience] || 'dungeon', features: [] },
       combat: { start: false, enemies: [] }, suggestions: [], memory: '',
     };
     const p = Math.max(1, view.players || 1);
@@ -341,8 +350,9 @@
     }
 
     if (event && event.text === 'start') {
-      res.scene = Object.assign({}, adv.start);
-      res.segments.push(narr(adv.opening), { speaker: adv.giver.name, voice: adv.giver.voice, text: adv.pitch });
+      res.scene = Object.assign({}, adv.start, { features: (adv.start.features || []).slice() });
+      const mood = { gruff: '[wearily]', noble: '[gravely]', cheerful: '[cheerfully]', sage: '[softly]' }[adv.giver.voice] || '';
+      res.segments.push(narr(adv.opening), { speaker: adv.giver.name, voice: adv.giver.voice, text: `${mood} ${adv.pitch}`.trim() });
       res.effects.push(fx('npc', { name: adv.giver.name, note: 'Gave the party this job.', mood: 'friendly' }), fx('quest', { name: adv.quest, status: 'active' }));
       res.suggestions = defaults();
       res.memory = `The party took the job: ${adv.quest}.`;
@@ -395,7 +405,7 @@
     const others = acts.length > 1 ? ` The others follow ${who(act)}'s lead.` : '';
 
     if (MOVE.test(text) && next) {
-      res.scene = { location: next.loc, ambience: next.ambience, shop: false };
+      res.scene = { location: next.loc, ambience: next.ambience, shop: false, layout: next.layout || FROM_AMBIENCE[next.ambience] || 'dungeon', features: [] };
       res.segments.push(narr(next.intro));
       res.combat.start = true;
       res.combat.enemies = next.foes.map(([type, base, per, alias]) => ({ type, name: alias || type, count: base + (per === 'p' ? p : 0) })).filter((e) => e.count > 0);
@@ -433,5 +443,5 @@
     return res;
   }
 
-  return { VOICES, AMBIENCE, EFFECT_TYPES, TIERS, DIFFICULTIES, ABILITIES, BESTIARY, ADVENTURES, adventure, SCHEMA, SYSTEM, buildUser, scripted, classify };
+  return { LAYOUTS, VOICES, AMBIENCE, EFFECT_TYPES, TIERS, DIFFICULTIES, ABILITIES, BESTIARY, ADVENTURES, adventure, SCHEMA, SYSTEM, buildUser, scripted, classify };
 });

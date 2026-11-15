@@ -21,6 +21,7 @@ const out = [
   body.trim(),
   script('window.DND_DATA = ' + JSON.stringify(JSON.parse(read('data.json'))) + ';'),
   script(read('dm.js')),
+  script(read('maps.js')),
   script(read('engine.js')),
   script(read('public/audio.js')),
   script(read('public/net.js')),

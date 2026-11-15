@@ -530,10 +530,15 @@ const LANG_CODES = {
   indonesian: 'id', vietnamese: 'vi', filipino: 'fil',
 };
 
+/** Remove inline audio tags ([whispers], [laughs]...) for voices that would read them aloud. */
+const stripTags = (t) => String(t == null ? '' : t).replace(/\[[^\]]{0,40}\]/g, ' ').replace(/\s+/g, ' ').trim();
+
 function elevenVoice(env, opts) {
   const key = env.ELEVENLABS_API_KEY;
   const base = trimSlash(env.AIDND_ELEVENLABS_URL || 'https://api.elevenlabs.io');
-  const model = String(env.ELEVENLABS_MODEL || 'eleven_flash_v2_5').trim();
+  const model = String(env.ELEVENLABS_MODEL || 'eleven_v4').trim();
+  // The expressive models act on inline audio tags such as [whispers]; the others would read them out.
+  const tags = /eleven_v[34]/.test(model);
   const sfxModel = String(env.ELEVENLABS_SFX_MODEL || 'eleven_text_to_sound_v3').trim();
   const dataDir = opts && opts.dataDir ? String(opts.dataDir) : '';
   const E = errorFactory('elevenlabs', [key]);
@@ -617,7 +622,7 @@ function elevenVoice(env, opts) {
 
   async function speak(args) {
     const a = args || {};
-    const text = speechText(a.text);
+    const text = speechText(tags ? a.text : stripTags(a.text));
     if (!text) throw E('bad_request', 'nothing to say');
     const archetype = archetypeOf(a.voice);
     const code = LANG_CODES[lower(a.lang)] || '';
@@ -784,7 +789,7 @@ function geminiVoice(env, opts) {
 
   async function speak(args) {
     const a = args || {};
-    const text = speechText(a.text);
+    const text = speechText(stripTags(a.text));
     if (!text) throw E('bad_request', 'nothing to say');
     const v = GEMINI_VOICES[archetypeOf(a.voice)];
     const cacheKey = sha(`gemini|${v.voice}|${model}|${text}`);

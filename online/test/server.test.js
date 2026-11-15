@@ -116,7 +116,9 @@ async function until(fn, what, ms) {
     for (let i = 0; i < 80 && sa.room.phase === 'combat'; i++) {
       const turn = sa.room.combat.turn;
       const foe = sa.room.combat.enemies.find((e) => e.alive);
-      await act(turn === a.playerId ? a : b, { t: 'attack', target: foe.id });
+      const who = turn === a.playerId ? a : b;
+      const r = await act(who, { t: 'attack', target: foe.id });
+      if (!r.ok) { await sleep(60); await act(who, { t: 'endturn' }); }
       await sleep(70);
     }
     assert.ok(['scene', 'defeat'].includes(sa.room.phase), 'the fight ended');

@@ -51,6 +51,7 @@ const STATIC = {
   '/table.js': ['public/table.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8'],
   '/engine.js': ['engine.js', 'text/javascript; charset=utf-8'],
+  '/maps.js': ['maps.js', 'text/javascript; charset=utf-8'],
   '/dm.js': ['dm.js', 'text/javascript; charset=utf-8'],
 };
 const dataJs = 'window.DND_DATA = ' + JSON.stringify(DATA) + ';';
@@ -130,7 +131,7 @@ async function speak(entry, seg) {
   if (!voice) return null;
   if (voiceBudget(entry) < seg.text.length) { const e = new Error('voice budget used up'); e.code = 'budget'; throw e; }
   const before = voice.chars || 0;
-  const out = await voice.speak({ text: seg.text, voice: seg.voice, lang: entry.room.opts.lang });
+  const out = await voice.speak({ text: seg.tts || seg.text, voice: seg.voice, lang: entry.room.opts.lang });
   entry.spoken.n += Math.max(0, (voice.chars || 0) - before);
   return out;
 }

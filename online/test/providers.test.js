@@ -375,7 +375,7 @@ test('createVoice: provider selection rules', () => {
   }
   const v = P.createVoice({ ELEVENLABS_API_KEY: E_KEY, GEMINI_API_KEY: G_KEY }, {});
   assert.strictEqual(v.name, 'elevenlabs');
-  assert.strictEqual(v.model, 'eleven_flash_v2_5');
+  assert.strictEqual(v.model, 'eleven_v4');
   assert.strictEqual(typeof v.speak, 'function');
   assert.strictEqual(typeof v.sfx, 'function');
   assert.strictEqual(v.chars, 0);
@@ -404,7 +404,7 @@ test('elevenlabs: speak request shape, memory cache, disk cache, chars counter',
   assert.strictEqual(r.method, 'POST');
   assert.ok(/^\/v1\/text-to-speech\/[A-Za-z0-9]+\?output_format=mp3_44100_128$/.test(r.url), r.url);
   assert.strictEqual(r.headers['xi-api-key'], E_KEY);
-  assert.deepStrictEqual(r.body, { text, model_id: 'eleven_flash_v2_5' });
+  assert.deepStrictEqual(r.body, { text, model_id: 'eleven_v4' });
   assert.strictEqual(voice.chars, text.length);
   assert.strictEqual(typeof voice.chars, 'number');
 
@@ -416,7 +416,7 @@ test('elevenlabs: speak request shape, memory cache, disk cache, chars counter',
   const files = fs.readdirSync(path.join(dir, 'tts'));
   assert.strictEqual(files.length, 1);
   assert.ok(/^[0-9a-f]{64}\.mp3$/.test(files[0]), files[0]);
-  const expected = require('crypto').createHash('sha256').update(`elevenlabs|${voiceIdOf(r)}|eleven_flash_v2_5|${text}`).digest('hex');
+  const expected = require('crypto').createHash('sha256').update(`elevenlabs|${voiceIdOf(r)}|eleven_v4|${text}`).digest('hex');
   assert.strictEqual(files[0], `${expected}.mp3`, 'cache key is sha256(provider|voiceId|model|text)');
 
   const second = P.createVoice(elEnv(), { dataDir: dir });
@@ -505,6 +505,15 @@ test('elevenlabs: 401 and 429 do not mark a voice bad; 429 and 5xx are retried o
   assert.ok(warnings.every((w) => !w.includes(E_KEY)), 'no key value in any log line');
 });
 
+test('elevenlabs: emotion tags reach the expressive model and are stripped for the fast one', async () => {
+  el.reset();
+  el.fallback = sendAudio(MP3);
+  await P.createVoice(elEnv(), { dataDir: freshDir() }).speak({ text: '[whispers] Keep your voice down.', voice: 'narrator' });
+  assert.strictEqual(el.reqs[0].body.text, '[whispers] Keep your voice down.');
+  await P.createVoice(Object.assign(elEnv(), { ELEVENLABS_MODEL: 'eleven_flash_v2_5' }), { dataDir: freshDir() }).speak({ text: '[whispers] Keep your voice down.', voice: 'narrator' });
+  assert.strictEqual(el.reqs[1].body.text, 'Keep your voice down.');
+});
+
 test('elevenlabs: text is capped at 1200 characters and empty text is rejected', async () => {
   el.reset();
   el.fallback = sendAudio(MP3);
@@ -522,7 +531,7 @@ test('elevenlabs: text is capped at 1200 characters and empty text is rejected',
 test('elevenlabs: language_code is sent for other languages and dropped if the API refuses it', async () => {
   el.reset();
   el.fallback = sendAudio(MP3);
-  const voice = P.createVoice(elEnv(), { dataDir: freshDir() });
+  const voice = P.createVoice(Object.assign(elEnv(), { ELEVENLABS_MODEL: 'eleven_flash_v2_5' }), { dataDir: freshDir() });
   await voice.speak({ text: 'Bienvenidos, viajeros.', voice: 'narrator', lang: 'Spanish' });
   assert.strictEqual(el.reqs[0].body.language_code, 'es');
   el.queue.push(elevenErr(400, 'unsupported_language', 'language_code is not supported'));

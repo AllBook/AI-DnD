@@ -12,9 +12,9 @@
  * data.json. Runs in Node (require) and in the browser (window.Engine).
  */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory(require('./data.json'), require('./dm.js'));
-  else root.Engine = factory(root.DND_DATA, root.DMBrain);
-})(typeof self !== 'undefined' ? self : this, function (DATA, DM) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./data.json'), require('./dm.js'), require('./maps.js'));
+  else root.Engine = factory(root.DND_DATA, root.DMBrain, root.GameMaps);
+})(typeof self !== 'undefined' ? self : this, function (DATA, DM, Maps) {
   'use strict';
 
   const own = (o, k) => o != null && typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
@@ -224,6 +224,198 @@
   const livingEnemies = (room) => (room.combat ? room.combat.enemies.filter((e) => e.alive) : []);
   const partyLevel = (room) => { const ps = players(room); return ps.length ? Math.max(1, Math.round(ps.reduce((s, p) => s + p.level, 0) / ps.length)) : 1; };
   const locationOf = (room) => room.scene.location;
+
+  // ---------- the tabletop map ----------
+
+  const SPEED = { Fighter: 6, Wizard: 6, Rogue: 7, Cleric: 6 };
+  const ESPEED = { Goblin: 6, Wolf: 8, Bandit: 6, Cultist: 6, Skeleton: 5, Spider: 6, Orc: 6, Wraith: 6, Ogre: 5, Boss: 5 };
+  const speedOf = (p) => (p && SPEED[p.cls]) || 6;
+  const K = (pos) => Maps.key(pos.x, pos.y);
+
+  function layoutFor(room, wanted) { return Maps.LAYOUTS.includes(wanted) ? wanted : (Maps.FROM_AMBIENCE[room.scene.ambience] || 'dungeon'); }
+
+  /** Squares nobody else may end a move on (and enemies and props cannot be walked through). */
+  function blockers(room, exceptId) {
+    const all = new Set(), hard = new Set();
+    players(room).forEach((p) => { if (p.pos && p.id !== exceptId) all.add(K(p.pos)); });
+    livingEnemies(room).forEach((e) => { if (e.pos && e.id !== exceptId) { all.add(K(e.pos)); hard.add(K(e.pos)); } });
+    // Characters in the scene can be squeezed past; chests cannot.
+    if (room.map) room.map.objects.forEach((o) => { if (o.kind === 'npc' || o.kind === 'chest') all.add(Maps.key(o.x, o.y)); if (o.kind === 'chest') hard.add(Maps.key(o.x, o.y)); });
+    return { all, hard };
+  }
+  const centre = (room) => { const ps = players(room).filter((p) => p.pos); return ps.length ? ps[0].pos : (room.map ? room.map.spawn : { x: 0, y: 0 }); };
+
+  function placeParty(room) {
+    const m = room.map;
+    if (!m) return;
+    players(room).forEach((p) => { delete p.pos; });
+    const spots = Maps.freeNear(m, m.spawn, blockers(room).all, players(room).length);
+    players(room).forEach((p, i) => { p.pos = spots[i] || { x: m.spawn.x, y: m.spawn.y }; });
+    Maps.reveal(m, players(room).map((p) => p.pos));
+  }
+  function ensurePos(room) {
+    const m = room.map;
+    if (!m || (room.phase !== 'scene' && room.phase !== 'combat')) return;
+    const missing = players(room).filter((p) => !p.pos || !Maps.inb(m, p.pos.x, p.pos.y));
+    if (!missing.length) return;
+    const spots = Maps.freeNear(m, centre(room), blockers(room).all, missing.length);
+    missing.forEach((p, i) => { p.pos = spots[i] || { x: m.spawn.x, y: m.spawn.y }; });
+    Maps.reveal(m, missing.map((p) => p.pos));
+  }
+  function newMap(room, layout) {
+    const id = (room.map ? room.map.id : 0) + 1;
+    room.map = Maps.generate(layoutFor(room, layout), `${room.scene.location}|${room.code}|${id}`, id);
+    placeParty(room);
+  }
+
+  /** Shortest walk for a hero to (x, y) within `max` squares, or null. */
+  function findPath(room, p, to, max) {
+    const m = room.map;
+    if (!m || !p.pos || !Maps.inb(m, to.x, to.y)) return null;
+    const b = blockers(room, p.id);
+    if (b.all.has(K(to))) return null;
+    const seen = Maps.bfs(m, p.pos, { max, blocked: b.hard });
+    return seen.has(K(to)) ? Maps.trace(seen, K(to)) : null;
+  }
+  const inCombatTurn = (room, p) => room.phase === 'combat' && room.combat && room.combat.turn === p.id;
+  const moveBudget = (room, p) => (room.phase === 'combat' ? (inCombatTurn(room, p) ? room.combat.left : 0) : 60);
+
+  function pathTo(room, pid, x, y) {
+    const p = room.players[pid];
+    if (!p) return null;
+    return findPath(room, p, { x, y }, moveBudget(room, p));
+  }
+  function reachable(room, pid) {
+    const p = room.players[pid], m = room.map;
+    if (!p || !p.pos || !m) return [];
+    const b = blockers(room, pid);
+    const seen = Maps.bfs(m, p.pos, { max: moveBudget(room, p), blocked: b.hard });
+    return [...seen.values()].filter((c) => c.d > 0 && !b.all.has(Maps.key(c.x, c.y)) && m.seen[c.y][c.x] === '1').map((c) => ({ x: c.x, y: c.y }));
+  }
+
+  /** Squares of reach for an action (1 = melee). Distance is counted as in D&D 5e: diagonals count 1. */
+  function rangeOf(room, pid, a) {
+    if (!a) return 1;
+    if (a.t === 'ability') return a.id === 'fireball' ? 8 : 1;
+    if (a.t === 'spell') {
+      const s = own(SPELLS, a.id) ? SPELLS[a.id] : null;
+      if (!s) return 1;
+      if (a.id === 'resurrection') return 1;
+      return s.spell_type === 'Heal' || s.spell_type === 'Buff' ? 6 : 8;
+    }
+    if (a.t === 'attempt') return 2;
+    return 1;
+  }
+
+  /** Walk next to (or within `range` of) a square, using what movement there is. */
+  function approach(room, p, to, range, label) {
+    const m = room.map;
+    if (!m || !p.pos || !to) return null;
+    if (Maps.dist(p.pos, to) <= range) return null;
+    const max = moveBudget(room, p);
+    const b = blockers(room, p.id);
+    const seen = Maps.bfs(m, p.pos, { max, blocked: b.hard });
+    let best = null;
+    for (const c of seen.values()) {
+      if (c.d === 0 || b.all.has(Maps.key(c.x, c.y)) || Maps.dist(c, to) > range) continue;
+      if (!best || c.d < best.d) best = c;
+    }
+    if (!best) {
+      const gap = Maps.dist(p.pos, to) - range;
+      return room.phase === 'combat'
+        ? `${label} is out of reach: ${gap} more square${gap === 1 ? '' : 's'} than you can cover. Move closer, or end your turn.`
+        : `You cannot get to ${label} from here.`;
+    }
+    p.pos = { x: best.x, y: best.y };
+    if (room.phase === 'combat') room.combat.left = Math.max(0, room.combat.left - best.d);
+    Maps.reveal(m, [p.pos]);
+    return null;
+  }
+
+  function doMove(room, p, a) {
+    const m = room.map;
+    if (!m || !p.pos) return 'There is no map here yet.';
+    if (!p.alive) return 'You are down.';
+    const x = Math.floor(Number(a.x)), y = Math.floor(Number(a.y));
+    if (!Maps.inb(m, x, y)) return 'That is off the map.';
+    if (room.phase === 'combat') { if (!inCombatTurn(room, p)) return 'Wait for your turn to move.'; } else if (room.phase !== 'scene') return 'Not right now.';
+    if (p.pos.x === x && p.pos.y === y) return null;
+    if (m.seen[y][x] !== '1') return 'You have not explored there yet.';
+    if (!Maps.walkable(m, x, y)) return 'You cannot stand there.';
+    const path = findPath(room, p, { x, y }, moveBudget(room, p));
+    if (!path) return room.phase === 'combat' ? `Too far: you have ${room.combat.left} square${room.combat.left === 1 ? '' : 's'} of movement left.` : 'You cannot get there from here.';
+    p.pos = { x, y };
+    if (room.phase === 'combat') room.combat.left -= path.length;
+    Maps.reveal(m, [p.pos]);
+    return null;
+  }
+
+  function doInteract(room, p, a) {
+    const m = room.map;
+    if (!m || !p.pos) return 'There is no map here yet.';
+    if (!p.alive) return 'You are down.';
+    const x = Math.floor(Number(a.x)), y = Math.floor(Number(a.y));
+    if (!Maps.inb(m, x, y)) return 'That is off the map.';
+    const combat = room.phase === 'combat';
+    if (combat) { if (!inCombatTurn(room, p)) return 'Wait for your turn.'; } else if (room.phase !== 'scene') return 'Not right now.';
+    const tile = Maps.at(m, x, y);
+    if (tile === '+' || tile === "'") {
+      const err = approach(room, p, { x, y }, 1, 'the door');
+      if (err) return err;
+      if (tile === "'") {
+        if (players(room).some((q) => q.pos && q.pos.x === x && q.pos.y === y) || livingEnemies(room).some((e) => e.pos && e.pos.x === x && e.pos.y === y)) return 'Someone is standing in the doorway.';
+        Maps.setTile(m, x, y, '+');
+        say(room, 'sys', `${p.name} closes a door.`);
+      } else {
+        Maps.setTile(m, x, y, "'");
+        Maps.reveal(m, [{ x, y }].concat(players(room).filter((q) => q.pos).map((q) => q.pos)));
+        say(room, 'sys', `${p.name} opens a door.`, { door: Maps.key(x, y) });
+      }
+      return null;
+    }
+    const obj = m.objects.find((o) => o.x === x && o.y === y);
+    if (!obj) return 'There is nothing to use there.';
+    if (combat) return 'Not in the middle of a fight.';
+    if (obj.kind !== 'chest' && room.dm.queue.filter((q) => q.pid === p.id).length >= 2) return 'The Dungeon Master is still catching up with you.';
+    const err = approach(room, p, obj, 1, `the ${obj.name}`);
+    if (err) return err;
+    if (obj.kind === 'chest') {
+      if (obj.used) return 'The chest is empty.';
+      obj.used = true;
+      const loot = rollLoot(room.story.stage >= 3 && Math.random() < 0.35 ? 'chest_rare' : 'chest_common');
+      giveLoot(room, p, loot);
+      say(room, 'sys', `${p.name} opens the chest: ${lootText(loot) || 'nothing but dust'}.`);
+      return null;
+    }
+    const text = obj.kind === 'exit' ? `${p.name} leads the party onward: ${obj.name}.`
+      : obj.kind === 'npc' ? `${p.name} goes over to talk to ${obj.name}.`
+        : `${p.name} examines the ${obj.name}.`;
+    const shown = obj.kind === 'exit' ? `Heads for the ${obj.name}` : obj.kind === 'npc' ? `Goes over to ${obj.name}` : `Examines the ${obj.name}`;
+    say(room, 'you', shown, { who: p.name, mode: 'do' });
+    queueIntent(room, { pid: p.id, kind: 'do', text });
+    return null;
+  }
+
+  /** Put an enemy next to the nearest hero, up to its speed. Returns the hero it can now hit, or null. */
+  function moveEnemy(room, e) {
+    const heroes = livingPlayers(room).filter((p) => p.pos);
+    const m = room.map;
+    if (!m || !e.pos || !heroes.length) return null;
+    const adjacent = () => heroes.filter((h) => Maps.dist(h.pos, e.pos) <= 1).sort((a, b) => a.hp - b.hp)[0] || null;
+    let t = adjacent();
+    if (t) return t;
+    const b = blockers(room, e.id);
+    const wall = new Set(b.hard);
+    heroes.forEach((h) => wall.add(K(h.pos)));
+    const seen = Maps.bfs(m, e.pos, { max: 40, blocked: wall });
+    let goal = null;
+    for (const c of seen.values()) if (c.d > 0 && !b.all.has(Maps.key(c.x, c.y)) && heroes.some((h) => Maps.dist(h.pos, c) <= 1) && (!goal || c.d < goal.d)) goal = c;
+    if (!goal) return null;
+    const path = Maps.trace(seen, Maps.key(goal.x, goal.y));
+    const steps = Math.min(path.length, ESPEED[e.type] || 6);
+    if (steps > 0) e.pos = path[steps - 1];
+    return adjacent();
+  }
   function findPlayer(room, name) {
     name = clean(name, 40).toLowerCase();
     if (!name) return null;
@@ -296,8 +488,15 @@
     });
     const order = livingPlayers(room).map((x) => x.id);
     if (!order.length || !enemies.length) return false;
+    if (room.map) {
+      ensurePos(room);
+      const spots = Maps.enemySpots(room.map, centre(room), blockers(room).all, enemies.length, Math.random);
+      const more = spots.length < enemies.length ? Maps.freeNear(room.map, centre(room), new Set([...blockers(room).all].concat(spots.map(K))), enemies.length - spots.length, 2) : [];
+      enemies.forEach((e, i) => { e.pos = spots[i] || more[i - spots.length] || null; });
+      Maps.reveal(room.map, enemies.filter((e) => e.pos).map((e) => e.pos));
+    }
     room.phase = 'combat';
-    room.combat = Object.assign({ enemies, order, turn: null, round: 1 }, extra || {});
+    room.combat = Object.assign({ enemies, order, turn: null, round: 1, left: 0, acted: false }, extra || {});
     room.dm.check = null;
     room.dm.queue = room.dm.queue.filter((q) => q.kind !== 'do' && q.kind !== 'say');
     players(room).forEach((x) => { x.cds = {}; x.fx = x.fx.filter((f) => f.k === 'str'); });
@@ -326,6 +525,8 @@
     guard = guard || 0;
     const p = room.players[pid];
     c.turn = pid;
+    c.left = speedOf(p);
+    c.acted = false;
     room.turnSince = Date.now();
     if (!p || !p.alive) return advance(room, guard + 1);
     p.mana = Math.min(p.maxMana, p.mana + Math.max(5, Math.round(p.maxMana * 0.1)));
@@ -366,12 +567,26 @@
       const targets = livingPlayers(room);
       if (!targets.length) return;
       if (hasFx(e, 'stun')) { say(room, 'foe', `${e.name} is stunned and cannot act.`); tickFx(e); continue; }
-      const t = pick(targets);
+      const onMap = room.map && e.pos;
+      const t = onMap ? moveEnemy(room, e) : pick(targets);
       const m = MONSTERS[e.type];
       const special = Math.random() < 0.3;
-      if (e.boss && c.round % 3 === 0) {
-        const parts = targets.map((p) => `${p.name} ${hit(p, atkOf(e) * 0.7)}`);
-        say(room, 'foe', `${e.name} unleashes a devastating sweep across the whole party — ${parts.join(', ')} damage.`);
+      const swept = onMap ? targets.filter((p) => p.pos && Maps.dist(p.pos, e.pos) <= 2) : targets;
+      if (!t && !(e.boss && c.round % 3 === 0 && swept.length)) {
+        const far = onMap && e.type === 'Cultist' ? targets.filter((p) => p.pos && Maps.dist(p.pos, e.pos) <= 5).sort((a, b) => a.hp - b.hp)[0] : null;
+        if (far) {
+          say(room, 'foe', `${e.name} hurls a bolt of shadow at ${far.name} for ${hit(far, atkOf(e) * 0.8)} damage.`, { hurt: far.id });
+          if (!far.alive) say(room, 'foe', `${far.name} falls!`);
+        }
+        tickFx(e);
+        continue;
+      }
+      if (e.boss && c.round % 3 === 0 && swept.length) {
+        const parts = swept.map((p) => `${p.name} ${hit(p, atkOf(e) * 0.7)}`);
+        say(room, 'foe', `${e.name} unleashes a devastating sweep — ${parts.join(', ')} damage.`);
+        swept.forEach((p) => { if (!p.alive) say(room, 'foe', `${p.name} falls!`); });
+        tickFx(e);
+        continue;
       } else if (special && m.ability === 'fury' && e.fury < 3) {
         e.fury += 1; e.atk += 2;
         const a = hit(t, atkOf(e)), b = t.alive ? hit(t, atkOf(e)) : 0;
@@ -438,7 +653,10 @@
   function findTarget(room, action, kind) {
     if (kind === 'enemy') {
       const e = room.combat && room.combat.enemies.find((x) => x.id === action.target && x.alive);
-      return e || livingEnemies(room)[0];
+      if (e) return e;
+      const me = room.combat && room.players[room.combat.turn];
+      const alive = livingEnemies(room);
+      return me && me.pos ? alive.filter((x) => x.pos).sort((a, b) => Maps.dist(a.pos, me.pos) - Maps.dist(b.pos, me.pos))[0] || alive[0] : alive[0];
     }
     const p = own(room.players, action.target) ? room.players[action.target] : null;
     return p && p.cls ? p : null;
@@ -479,8 +697,9 @@
     const bonus = abilityMod(p.scores.INT) + gearStat(p, 'magic_damage');
     if (s.spell_type === 'Damage') {
       if (!room.combat) return 'There is nothing to attack.';
-      const targets = s.aoe ? livingEnemies(room) : [findTarget(room, action, 'enemy')];
-      if (!targets[0]) return 'There is nothing to attack.';
+      const primary = findTarget(room, action, 'enemy');
+      if (!primary) return 'There is nothing to attack.';
+      const targets = s.aoe ? livingEnemies(room).filter((e) => e === primary || !e.pos || !primary.pos || Maps.dist(e.pos, primary.pos) <= 1) : [primary];
       p.mana -= s.mana_cost;
       let total = 0;
       const parts = targets.map((e) => {
@@ -537,6 +756,16 @@
     const c = room.combat;
     if (c.turn !== p.id) return 'It is not your turn.';
     if (!p.alive) return 'You are down.';
+    if (a.t === 'endturn') { say(room, 'act', `${p.name} ends their turn.`); tickFx(p); advance(room); return null; }
+    if (room.map && p.pos) {
+      let tgt = null;
+      const friendly = (a.t === 'ability' && a.id === 'heal') || (a.t === 'spell' && own(SPELLS, a.id) && ['Heal', 'Buff'].includes(SPELLS[a.id].spell_type)) || a.t === 'use';
+      if (['attack', 'ability', 'spell', 'attempt', 'use'].includes(a.t)) tgt = friendly ? findTarget(room, a, 'ally') : findTarget(room, a, 'enemy');
+      if (tgt && tgt !== p && tgt.pos) {
+        const err = approach(room, p, tgt.pos, a.t === 'use' ? 1 : rangeOf(room, p.id, a), tgt.name);
+        if (err) return err;
+      }
+    }
     if (a.t === 'attack') {
       const e = findTarget(room, a, 'enemy');
       const roll = d(6);
@@ -654,6 +883,7 @@
   function act(room, pid, a) {
     const fail = (error) => ({ ok: false, error });
     if (!own(room.players, pid)) return fail('You are not in this party.');
+    ensurePos(room);
     const p = room.players[pid];
     if (!a || typeof a.t !== 'string') return fail('Bad action.');
     const isHost = room.host === pid;
@@ -732,6 +962,9 @@
       else { say(room, 'sys', `${cur.name}'s turn is skipped.`); tickFx(cur); advance(room); }
     } else if (!p.cls) {
       err = 'Choose a class first.';
+    } else if (a.t === 'move' || a.t === 'interact') {
+      ensurePos(room);
+      err = a.t === 'move' ? doMove(room, p, a) : doInteract(room, p, a);
     } else if (room.phase === 'lobby') {
       if (a.t !== 'start') err = 'The adventure has not started yet.';
       else if (!isHost) err = 'Only the host can begin the adventure.';
@@ -740,6 +973,7 @@
         room.phase = 'scene';
         room.scene = { location: adv.start.location, ambience: adv.start.ambience, shop: !!adv.start.shop, rested: false };
         room.story.stage = 0;
+        newMap(room, adv.start.layout);
         const names = players(room).map((x) => `${x.name} the ${x.cls}`).join(', ');
         queueIntent(room, { pid: null, kind: 'event', text: 'start', detail: `The adventure begins. Open the story: set the scene at ${adv.start.location}, bring in the heroes (${names}) and present the hook.` });
       }
@@ -774,6 +1008,7 @@
         room.phase = 'scene';
         room.scene.rested = true;
         players(room).forEach((m) => { m.alive = true; m.hp = m.maxHp; m.mana = m.maxMana; m.gold = Math.floor(m.gold / 2); m.fx = []; m.cds = {}; });
+        placeParty(room);
         say(room, 'sys', 'The party regroups: everyone is back on their feet, and half of each purse is gone.');
         queueIntent(room, { pid: null, kind: 'event', text: 'lost', detail: `The whole party was beaten at ${room.scene.location}. They wake somewhere safe nearby, patched up and poorer. Narrate the waking and offer a way forward.` });
       }
@@ -818,6 +1053,11 @@
         return i.detail ? { kind: i.kind, text: i.text, detail: i.detail } : { player: p ? p.name : 'table', kind: i.kind, text: i.text };
       }),
       stage: room.story.stage, players: players(room).length,
+      map: room.map ? {
+        layout: room.map.layout,
+        things: room.map.objects.map((o) => `${o.name} (${o.kind})`),
+        closedDoors: room.map.tiles.join('').split('+').length - 1,
+      } : null,
     };
   }
 
@@ -959,6 +1199,37 @@
    * {stale: true} when that beat is no longer open, or {invalid: true} when the
    * reply had nothing usable (the caller should then call dmFallback).
    */
+  /** Put the NPCs who speak and the things the DM just described onto the map. */
+  function placeStory(room, segs, features) {
+    const m = room.map;
+    const taken = blockers(room).all;
+    m.objects.forEach((o) => taken.add(Maps.key(o.x, o.y)));
+    const r = Maps.rng(`${m.id}|${room.story.beats}`);
+    const names = new Set(m.objects.map((o) => o.name.toLowerCase()));
+    segs.forEach((sg) => {
+      if (sg.speaker === 'narrator' || names.has(sg.speaker.toLowerCase())) return;
+      const npc = room.story.npcs.find((n) => same(n.name, sg.speaker));
+      const spot = (m.spots && m.spots.npc || []).find((c) => Maps.walkable(m, c.x, c.y) && !taken.has(Maps.key(c.x, c.y))) || Maps.freeNear(m, centre(room), taken, 1, 2)[0];
+      if (!spot) return;
+      taken.add(Maps.key(spot.x, spot.y));
+      const npcs = m.objects.filter((o) => o.kind === 'npc');
+      if (npcs.length >= 6) m.objects.splice(m.objects.indexOf(npcs[0]), 1);
+      m.objects.push({ id: 'o' + m.next++, kind: 'npc', x: spot.x, y: spot.y, name: sg.speaker, used: false, voice: sg.voice, mood: npc ? npc.mood : 'neutral' });
+      names.add(sg.speaker.toLowerCase());
+    });
+    m.objects.forEach((o) => { if (o.kind === 'npc') { const n = room.story.npcs.find((x) => same(x.name, o.name)); if (n) o.mood = n.mood; } });
+    features.slice(0, 4).forEach((f) => {
+      const name = clean(String(f || '').replace(/^(the|a|an)\s+/i, ''), 32);
+      if (!name || names.has(name.toLowerCase()) || findPlayer(room, name) || room.story.npcs.some((n) => same(n.name, name))) return;
+      const spot = Maps.featureSpot(m, centre(room), taken, r);
+      if (!spot) return;
+      const feats = m.objects.filter((o) => o.kind === 'feature');
+      if (feats.length >= 8) m.objects.splice(m.objects.indexOf(feats[0]), 1);
+      m.objects.push({ id: 'o' + m.next++, kind: 'feature', x: spot.x, y: spot.y, name: name.charAt(0).toUpperCase() + name.slice(1), used: false });
+      names.add(name.toLowerCase());
+    });
+  }
+
   function dmApply(room, seq, resp, opts) {
     opts = opts || {};
     if (!room.dm.busy || room.dm.busy.seq !== seq) return { stale: true };
@@ -969,7 +1240,10 @@
     let budgetChars = 1800;
     (Array.isArray(resp.segments) ? resp.segments : []).slice(0, 6).forEach((s) => {
       if (!s || typeof s !== 'object') return;
-      const text = clean(String(s.text || '').replace(/[*_#`]/g, ''), Math.min(700, budgetChars));
+      const raw = clean(String(s.text || '').replace(/[*_#`]/g, ''), Math.min(760, budgetChars + 60));
+      let tags = 0;
+      const tagged = raw.replace(/\[([^\]]{0,40})\]/g, (m0, t) => (/^[a-z][a-z ,'-]{0,30}$/i.test(t.trim()) && ++tags <= 3 ? `[${t.trim().toLowerCase()}]` : ' ')).replace(/\s+/g, ' ').trim();
+      const text = clean(tagged.replace(/\[[^\]]*\]/g, ' '), Math.min(700, budgetChars));
       if (!text) return;
       budgetChars -= text.length;
       let speaker = clean(s.speaker, 28) || 'narrator';
@@ -978,14 +1252,21 @@
         const npc = upsertNpc(room, speaker, { voice });
         if (npc) { speaker = npc.name; voice = npc.voice; } else { speaker = 'narrator'; voice = 'narrator'; }
       }
-      segs.push({ speaker, voice, text });
+      segs.push(tagged !== text ? { speaker, voice, text, tts: tagged } : { speaker, voice, text });
     });
     if (!segs.length) return { invalid: true };
 
     const extra = { segs, ai: !!opts.ai };
+    let relayout = !room.map && room.phase === 'scene';
+    let wantLayout = null;
     if (!cosmetic && resp.scene && typeof resp.scene === 'object') {
       const loc = clean(resp.scene.location, 48);
+      wantLayout = Maps.LAYOUTS.includes(resp.scene.layout) ? resp.scene.layout : null;
       if (loc && !same(loc, room.scene.location)) {
+        const words = (t) => new Set(t.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4));
+        const before = words(room.scene.location);
+        const related = [...words(loc)].some((w) => before.has(w));
+        if (!related || (wantLayout && room.map && wantLayout !== room.map.layout)) relayout = true;
         room.scene.location = loc;
         room.scene.rested = false;
         extra.title = loc;
@@ -995,6 +1276,8 @@
       if (DM.AMBIENCE.includes(resp.scene.ambience)) room.scene.ambience = resp.scene.ambience;
       room.scene.shop = resp.scene.shop === true;
     }
+    if (relayout && room.phase === 'scene') newMap(room, wantLayout);
+    if (!cosmetic && room.map) placeStory(room, segs, resp.scene && Array.isArray(resp.scene.features) ? resp.scene.features : []);
     const entry = say(room, 'dm', segs.map((s) => (s.speaker === 'narrator' ? s.text : `${s.speaker}: “${s.text}”`)).join(' '), extra);
 
     applyEffects(room, resp.effects, { cosmetic, trusted: !!opts.trusted });
@@ -1043,5 +1326,6 @@
   return {
     ITEMS, SPELLS, CLASSES, ABILITIES, MONSTERS, SHOP, ABILITY_NAMES, ADVENTURES, MAX_PLAYERS, IDLE_SKIP_MS, CHECK_TIMEOUT_MS, DM_STALE_MS,
     newRoom, addPlayer, act, atkOf, defOf, locationOf, dmNeeded, dmBegin, dmApply, dmFallback, dmView,
+    LAYOUTS: Maps.LAYOUTS, walkable: Maps.walkable, pathTo, reachable, rangeOf, speedOf, dist: Maps.dist,
   };
 });
