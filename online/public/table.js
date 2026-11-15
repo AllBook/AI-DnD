@@ -1776,7 +1776,16 @@
     const sw = mw * s, sh = mh * s;
     if (z <= 1.001) { tx = (W - sw) / 2; ty = (H - sh) / 2; c.panX = c.panY = 0; }
     else {
-      const f = myPos() || { x: m.w / 2, y: m.h / 2 };
+      let f = myPos() || { x: m.w / 2, y: m.h / 2 };
+      // in a fight, frame everyone still standing when they fit; otherwise follow your hero
+      if (S.battle && S.room && S.room.combat) {
+        const pts = [];
+        tokens.forEach((t) => { if ((t.kind === 'hero' || t.kind === 'foe') && !t.dead && t.px != null) pts.push(t); });
+        if (pts.length) {
+          const x0 = Math.min(...pts.map((t) => t.px)), x1 = Math.max(...pts.map((t) => t.px)), y0 = Math.min(...pts.map((t) => t.py)), y1 = Math.max(...pts.map((t) => t.py));
+          if ((x1 - x0 + 2) * U * s <= W && (y1 - y0 + 2) * U * s <= H) f = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+        }
+      }
       tx = W / 2 - (f.x + 0.5) * U * s + c.panX; ty = H / 2 - (f.y + 0.5) * U * s + c.panY;
       if (sw > W) tx = clamp(tx, W - sw - pad, pad); else tx = (W - sw) / 2;
       if (sh > H) ty = clamp(ty, H - sh - pad, pad); else ty = (H - sh) / 2;
