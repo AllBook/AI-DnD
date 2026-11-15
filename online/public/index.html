@@ -36,6 +36,7 @@
         <button id="joinBtn" type="button">Join</button>
       </div>
       <p class="hint">Lost your seat? Type your rejoin code in the code box to take your character back.</p>
+      <p class="hint" id="loadSaveRow">Have a campaign save file? <button class="link" id="loadSaveBtn" type="button">Resume from a save file</button><input type="file" id="loadSave" accept=".json,application/json" hidden></p>
       <p class="note" id="joinNote" role="status"></p>
     </div>
     <p class="lede small" id="modeHint" hidden></p>
@@ -138,6 +139,7 @@
       <div class="btns">
         <button type="button" id="helpBtn">How to play</button>
         <button type="button" id="exportBtn">Export the story (Markdown)</button>
+        <button type="button" id="saveFileBtn">Download campaign save</button>
       </div>
     </div>
   </dialog>

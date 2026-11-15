@@ -18,3 +18,8 @@ services:
       # Voices for the Dungeon Master and NPCs (optional).
       - key: ELEVENLABS_API_KEY
         sync: false
+      # Free cloud saves so campaigns survive restarts (optional, see online/README.md).
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false

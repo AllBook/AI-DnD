@@ -55,6 +55,7 @@ ANTHROPIC_API_KEY=your-key ELEVENLABS_API_KEY=your-key node server.js
 | `VOICE_PROVIDER` | auto | Force `soprano`, `elevenlabs`, `gemini`, `browser` or `off`. Auto picks Soprano, then ElevenLabs, then Gemini |
 | `VOICE_CHAR_BUDGET` | `40000` | Characters of speech per party per day |
 | `DATA_DIR` | `./data` | Saved parties and the audio cache |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | – | Also save parties to a free Upstash Redis database, so they survive restarts on hosts that wipe the disk |
 
 The ElevenLabs key needs the **Text to Speech** permission (and **Sound Effects**
 for generated ambience). It does not need to list voices.
@@ -113,6 +114,27 @@ Parties are saved under `DATA_DIR` and restored on restart, and a party can be
 resumed by its code for 14 days. On hosts whose disk is wiped on every restart
 (Render's free plan is one) a restart ends the parties in progress; attach a
 persistent disk or volume to keep them.
+
+## Keeping campaigns on a free host
+
+Render's free plan wipes the disk on every restart and redeploy. Three things keep
+campaigns safe anyway:
+
+1. **Cloud saves (recommended).** Create a free database at
+   [upstash.com](https://upstash.com) (Redis, any region near your server), open its
+   REST API section, and add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
+   to the server's environment. Every party is then saved there as you play and
+   reloaded when the server starts. `/healthz` shows `"saves": "cloud (Upstash) and
+   disk"` when it is on.
+2. **Browser copies.** Each player's browser keeps a copy of their party; if the
+   server has forgotten it, the first player back restores it automatically.
+3. **Save files.** Settings → *Download campaign save*. On the join screen,
+   *Resume from a save file* brings the party back on any server or device.
+
+The free plan also sleeps after about 15 idle minutes, and the first visit then takes
+about a minute. A free uptime monitor (for example UptimeRobot) that opens `/healthz`
+every 10 minutes keeps it awake; one always-on service fits within the free plan's
+monthly hours.
 
 ## How a session plays
 

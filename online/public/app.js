@@ -1699,6 +1699,7 @@
     $('autoplayBox').disabled = !hasAudio;
     $('audioNote').hidden = hasAudio;
     $('exportBtn').hidden = !canExport();
+    $('saveFileBtn').hidden = isArtifact();
     const rj = session && session.rejoin;
     $('seatSet').hidden = !rj;
     $('rejoinCode').textContent = rj || '';
@@ -1750,6 +1751,39 @@
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) { toast('The story could not be exported.'); }
+  }
+
+  // ---------------- campaign save files ----------------
+  // A save file holds the whole party plus your rejoin code, so a campaign can be resumed on any
+  // server, any device, even after the server forgot it.
+  function downloadSave() {
+    if (!state || isArtifact()) return;
+    const data = JSON.stringify({ kind: 'ai-dnd-save', v: 1, at: Date.now(), code: state.code, rejoin: (session && session.rejoin) || '', name: (session && session.name) || '', room: state });
+    try {
+      const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+      const a = h('a', { href: url, download: `ai-dnd-${String(state.code).toLowerCase()}-save.json`, hidden: true });
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast('Campaign saved to your downloads. Keep it to resume this party any time.', 'info');
+    } catch (e) { toast('The save could not be downloaded.'); }
+  }
+  async function loadSaveFile(file) {
+    if (!file || !N || !N.restore) return;
+    let save = null;
+    try { save = JSON.parse(await file.text()); } catch (e) { save = null; }
+    if (!save || save.kind !== 'ai-dnd-save' || !save.room || !save.code) { joinNote('That file is not an AI-DnD campaign save.'); return; }
+    const name = $('nameInput').value.trim() || save.name || 'Adventurer';
+    const prior = store.get('aidnd.session');
+    const token = prior && prior.code === save.code && prior.token ? prior.token : save.rejoin;
+    if (!token) { joinNote('That save has no rejoin code in it, so it cannot reclaim a seat.'); return; }
+    joinNote('Resuming your campaign…', true);
+    setJoinBusy(true);
+    try {
+      const res = await N.restore(save.code, name, token, save.room);
+      if (res && res.token) { enter(res, save.name || name, Object.assign({}, prior || {}, { code: save.code, rejoin: save.rejoin })); toast(res.restored ? 'Campaign restored from your save file.' : 'Welcome back to your party.', 'info'); }
+      else joinNote((res && res.error) || 'That save could not be resumed.');
+    } catch (e) { joinNote('Could not reach the server. Check your connection.'); }
+    setJoinBusy(false);
   }
 
   // ---------------- join screen ----------------
@@ -1814,6 +1848,7 @@
       const hint = $('modeHint');
       hint.textContent = 'Playing inside Claude: everyone opens this same page and uses the party code. Friends need a Claude account and access to this page to take a seat.';
       hint.hidden = false;
+      $('loadSaveRow').hidden = true;
     }
     if (saved && saved.code && saved.token && (!hash || hash === saved.code)) {
       joinNote('Rejoining your party…', true);
@@ -1852,6 +1887,9 @@
   });
   $('helpBtn').addEventListener('click', () => openDlg('helpDlg'));
   $('exportBtn').addEventListener('click', exportStory);
+  $('saveFileBtn').addEventListener('click', downloadSave);
+  $('loadSaveBtn').addEventListener('click', () => $('loadSave').click());
+  $('loadSave').addEventListener('change', (ev) => { const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; loadSaveFile(f); });
   $('rejoinCopy').addEventListener('click', () => { if (session && session.rejoin) copyText(session.rejoin, 'Rejoin code copied.', 'Rejoin code'); });
 
   document.querySelectorAll('dialog').forEach((d) => {

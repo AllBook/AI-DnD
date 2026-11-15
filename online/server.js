@@ -82,37 +82,77 @@ function newEntry(room) { return { room, seats: new Map(), clients: new Set(), p
 
 // ---------------------------------------------------------------- persistence
 
+// Saves go to the local disk and, when configured, to a free Upstash Redis database
+// (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN). The database survives restarts and
+// redeploys on hosts whose disk is wiped, such as Render's free plan.
+const REDIS_URL = String(process.env.UPSTASH_REDIS_REST_URL || '').replace(/\/+$/, '');
+const REDIS_TOKEN = String(process.env.UPSTASH_REDIS_REST_TOKEN || '');
+const REDIS_PREFIX = 'aidnd:room:';
+async function redis(cmd) {
+  if (!REDIS_URL || !REDIS_TOKEN) return null;
+  const res = await fetch(REDIS_URL, { method: 'POST', headers: { authorization: `Bearer ${REDIS_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify(cmd), signal: AbortSignal.timeout(10000) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.error) throw new Error(`Upstash ${res.status} ${json.error || ''}`.trim());
+  return json.result;
+}
+let redisWarned = false;
+const saveBody = (entry) => JSON.stringify({ room: entry.room, seats: [...entry.seats].map(([pid, s]) => [pid, s.token, s.rejoin, s.th, s.rh]), spoken: entry.spoken });
+
 function save(entry) {
   if (entry.saveTimer) return;
   entry.saveTimer = setTimeout(() => {
     entry.saveTimer = null;
     const file = path.join(ROOM_DIR, entry.room.code + '.json');
-    const body = JSON.stringify({ room: entry.room, seats: [...entry.seats].map(([pid, s]) => [pid, s.token, s.rejoin, s.th, s.rh]), spoken: entry.spoken });
+    const body = saveBody(entry);
     fs.mkdir(ROOM_DIR, { recursive: true }, (err) => {
       if (err) return;
       fs.writeFile(file + '.tmp', body, (err2) => { if (!err2) fs.rename(file + '.tmp', file, () => {}); });
     });
-  }, 1500);
+    redis(['SET', REDIS_PREFIX + entry.room.code, body, 'EX', String(Math.round(ROOM_TTL_MS / 1000))])
+      .then(() => { redisWarned = false; })
+      .catch((err) => { if (!redisWarned) { redisWarned = true; console.warn('cloud save failed:', err.message); } });
+  }, REDIS_URL ? 4000 : 1500);
   entry.saveTimer.unref();
+}
+
+function adopt(saved, code) {
+  const room = saved && saved.room;
+  if (!room || room.v !== 2 || room.code !== code || Date.now() - room.updated > ROOM_TTL_MS) return false;
+  if (rooms.has(code) && rooms.get(code).room.updated >= room.updated) return false;
+  // A Dungeon Master call that was in flight when the server stopped is asked again.
+  if (room.dm.busy) { room.dm.queue = (room.dm.busy.intents || []).concat(room.dm.queue); room.dm.busy = null; }
+  const entry = newEntry(room);
+  (saved.seats || []).forEach(([pid, token, rejoin, th, rh]) => { if (room.players[pid]) entry.seats.set(pid, makeSeat(token, rejoin, th, rh)); });
+  if (saved.spoken) entry.spoken = saved.spoken;
+  rooms.set(code, entry);
+  return true;
 }
 
 function loadRooms() {
   let files = [];
-  try { files = fs.readdirSync(ROOM_DIR).filter((f) => /^[A-Z]{4}\.json$/.test(f)); } catch (err) { return; }
+  try { files = fs.readdirSync(ROOM_DIR).filter((f) => /^[A-Z]{4}\.json$/.test(f)); } catch (err) { files = []; }
   for (const f of files) {
-    try {
-      const saved = JSON.parse(fs.readFileSync(path.join(ROOM_DIR, f), 'utf8'));
-      const room = saved.room;
-      if (!room || room.v !== 2 || room.code !== f.slice(0, 4) || Date.now() - room.updated > ROOM_TTL_MS) { fs.unlink(path.join(ROOM_DIR, f), () => {}); continue; }
-      // A Dungeon Master call that was in flight when the server stopped is asked again.
-      if (room.dm.busy) { room.dm.queue = (room.dm.busy.intents || []).concat(room.dm.queue); room.dm.busy = null; }
-      const entry = newEntry(room);
-      (saved.seats || []).forEach(([pid, token, rejoin, th, rh]) => { if (room.players[pid]) entry.seats.set(pid, makeSeat(token, rejoin, th, rh)); });
-      if (saved.spoken) entry.spoken = saved.spoken;
-      rooms.set(room.code, entry);
-    } catch (err) { console.warn('could not restore', f, err.message); }
+    try { if (!adopt(JSON.parse(fs.readFileSync(path.join(ROOM_DIR, f), 'utf8')), f.slice(0, 4))) fs.unlink(path.join(ROOM_DIR, f), () => {}); } catch (err) { console.warn('could not restore', f, err.message); }
   }
-  if (rooms.size) console.log(`Restored ${rooms.size} saved ${rooms.size === 1 ? 'party' : 'parties'}.`);
+  if (rooms.size) console.log(`Restored ${rooms.size} saved ${rooms.size === 1 ? 'party' : 'parties'} from disk.`);
+}
+
+async function loadCloud() {
+  if (!REDIS_URL) return;
+  try {
+    const keys = (await redis(['KEYS', REDIS_PREFIX + '*'])) || [];
+    let n = 0;
+    for (const k of keys) {
+      try { const v = await redis(['GET', k]); if (v && adopt(JSON.parse(v), k.slice(REDIS_PREFIX.length))) n++; } catch (err) { console.warn('could not restore', k, err.message); }
+    }
+    console.log(`Cloud saves: ${n} ${n === 1 ? 'party' : 'parties'} restored from Upstash.`);
+  } catch (err) { console.warn('cloud saves unavailable:', err.message); }
+}
+
+/** A party that is not in memory may still be in the cloud (another instance saved it). */
+async function fromCloud(code) {
+  if (!REDIS_URL || rooms.has(code) || !/^[A-Z]{4}$/.test(code)) return;
+  try { const v = await redis(['GET', REDIS_PREFIX + code]); if (v) adopt(JSON.parse(v), code); } catch (err) { /* ignore */ }
 }
 
 // ---------------------------------------------------------------- state fan-out
@@ -254,6 +294,7 @@ function seat(entry, name, token) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   try {
+    if (url.pathname.startsWith('/api/')) await cloudReady;
     if (req.method === 'GET' && STATIC[url.pathname]) {
       const [file, type] = STATIC[url.pathname];
       const stream = fs.createReadStream(path.join(__dirname, file));
@@ -272,6 +313,7 @@ const server = http.createServer(async (req, res) => {
         try { const a = await voice.speak({ text: 'Ready.', voice: 'narrator' }); voiceOk(); out.voiceTest = `ok (${a.buffer.length} bytes of ${a.mime})`; } catch (err) { voiceFailed(err); out.voiceTest = 'failed'; }
       }
       out.voiceError = voiceIssue();
+      out.saves = REDIS_URL ? 'cloud (Upstash) and disk' : 'disk only';
       return send(res, 200, out);
     }
 
@@ -289,6 +331,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/join') {
       const body = await readJson(req);
       const code = String(body.code || '').toUpperCase().trim();
+      await fromCloud(code);
       if (code.length === 6) {
         // A rejoin code: reclaim an existing seat from any device.
         for (const [roomCode, e] of rooms) for (const [pid, st] of e.seats) if (opens(st, code) && (st.rejoin === code || st.rh === sha(code))) { const out = claim(st, code, pid); save(e); return send(res, 200, Object.assign({ code: roomCode }, out)); }
@@ -309,6 +352,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req, 600 * 1024);
       const code = String(body.code || '').toUpperCase().trim();
       const room = body.room;
+      await fromCloud(code);
       if (rooms.has(code)) {
         const s = seat(rooms.get(code), body.name, body.token);
         if (s.error) return send(res, 409, { error: s.error });
@@ -414,11 +458,13 @@ setInterval(() => {
     if (!entry.clients.size && now - entry.room.updated > ROOM_TTL_MS) {
       rooms.delete(code);
       fs.unlink(path.join(ROOM_DIR, code + '.json'), () => {});
+      redis(['DEL', REDIS_PREFIX + code]).catch(() => {});
     }
   }
 }, 5000).unref();
 
 loadRooms();
+const cloudReady = loadCloud();
 server.listen(PORT, () => {
   console.log(`AI-DnD Online listening on http://localhost:${PORT}`);
   console.log(dm ? `Dungeon Master: ${dm.name} (${dm.model})` : 'Dungeon Master: scripted — set ANTHROPIC_API_KEY or GEMINI_API_KEY for the AI Dungeon Master.');
