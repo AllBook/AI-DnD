@@ -765,7 +765,7 @@
       out.push(G(shieldArt(c, X, k), { transform: D`translate(${CX - g.sw * 0.4} ${g.waistY}) rotate(-12) scale(.9)` }));
     }
     if (fl.lute) {
-      const bx = CX - g.sw * 0.7, by = g.waistY + 4, a = 32;
+      const bx = CX - g.sw * 0.55, by = g.waistY + 6, a = -24;
       const lute = [];
       lute.push(P(c, D`M2 -6L4 -66L-4 -66L-2 -6Z`, '#6b3f1f'), P(c, D`M-4.5 -66L5 -66L8 -80L-1 -78Z`, '#5a331a'));
       lute.push(S(D`M5 -70l4 -1M5.6 -74l4 -1M-3 -70l-4 -1`, '#e8e0d0', 1.4));
@@ -910,7 +910,7 @@
     if (race === 'Gnome') {
       const nx = g.fx + w * 0.07, nyy = ny - h * 0.03, rx = w * 0.14, ry = h * 0.085;
       out.push(shaded(c, D`M${nx - rx} ${nyy}A${rx} ${ry} 0 1 1 ${nx + rx} ${nyy}A${rx} ${ry} 0 1 1 ${nx - rx} ${nyy}Z`, mix(C.skin, '#d0705a', 0.22), [Ef(nx - rx * 0.6, nyy + ry * 0.4, rx * 0.8, ry * 0.8, C.skinS, { opacity: 0.8 })]));
-      out.push(Ef(nx + rx * 0.3, nyy - ry * 0.35, rx * 0.3, ry * 0.22, '#ffffff', { opacity: 0.55 }), Cf(nx - rx * 0.35, nyy + ry * 0.45, 0.9, C.skinD));
+      out.push(Ef(nx + rx * 0.3, nyy - ry * 0.35, rx * 0.3, ry * 0.22, '#ffffff', { opacity: 0.55 }));
     } else if (race === 'Half-Orc') {
       out.push(S(D`M${g.fx} ${g.eyeY + 1}Q${g.fx + w * 0.08} ${ny - h * 0.02} ${g.fx + w * 0.07} ${ny + h * 0.02}Q${g.fx} ${ny + h * 0.06} ${g.fx - w * 0.1} ${ny + h * 0.02}`, C.skinD, 1.5));
       out.push(Cf(g.fx - w * 0.04, ny + h * 0.02, 1.1, C.skinD));

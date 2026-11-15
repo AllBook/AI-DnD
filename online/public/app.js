@@ -60,7 +60,28 @@
   const TONES = [['family', 'Family friendly'], ['classic', 'Classic fantasy'], ['grim', 'Grim']];
   const DIFFS = [['story', 'Story (gentle)'], ['balanced', 'Balanced'], ['hard', 'Hard']];
   const LANGS = ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Dutch', 'Polish', 'Swedish', 'Turkish', 'Japanese', 'Korean', 'Chinese'];
-  const FX = { stun: ['Stunned', 'bad'], slow: ['Slowed', 'warn'], weak: ['Weakened', 'warn'], invuln: ['Shielded', 'good'], str: ['Empowered', 'good'], guard: ['Guarding', 'good'] };
+  // Conditions (fx entries {k, v, t}): badge label, colour, and what it does ({v} is the strength).
+  const FX = {
+    poison: ['Poisoned', 'bad', 'Takes {v} damage at the start of each turn. Any healing cures it.'],
+    fear: ['Frightened', 'bad', 'Gripped by dread: {v} less attack. Healing magic calms it.'],
+    prone: ['Prone', 'warn', 'Knocked down: only half movement next turn while getting up.'],
+    blind: ['Blinded', 'bad', 'Can barely see: {v} less attack.'],
+    stun: ['Stunned', 'bad', 'Loses the next turn.'],
+    slow: ['Slowed', 'warn', 'Sluggish: {v} less attack.'],
+    weak: ['Weakened', 'warn', 'Cursed: {v} less attack.'],
+    str: ['Empowered', 'good', '{v} more attack.'],
+    guard: ['Guarding', 'good', '{v} more defense until the next turn.'],
+    invuln: ['Shielded', 'good', 'Takes no damage at all.'],
+    exposed: ['Exposed', 'warn', 'Guard dropped: {v} less defense.'],
+  };
+  const FEATS = E.FEATS || {};
+  const ACHIEVEMENTS = E.ACHIEVEMENTS || {};
+  const UNIQUES = Array.isArray(E.UNIQUES) ? E.UNIQUES : [];
+  const MOODS = [['', 'Let the DM decide'], ['calm', 'Calm'], ['tense', 'Tense'], ['eerie', 'Eerie'], ['epic', 'Epic'], ['light', 'Light-hearted']];
+  const ENCOUNTERS = [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['deadly', 'Deadly']];
+  const SAFE_LAYOUTS = ['tavern', 'town', 'docks', 'camp'];
+  const REP_WORDS = ['hated', 'distrusted', 'disliked', 'unknown', 'liked', 'respected', 'celebrated'];
+  const HIT_DIE = { Barbarian: 12, Fighter: 10, Paladin: 10, Ranger: 10, Monk: 8, Rogue: 8, Cleric: 8, Bard: 8, Druid: 8, Warlock: 8, Wizard: 6, Sorcerer: 6 };
 
   // ---------------- characters: races, backgrounds, looks (from the engine, with fallbacks) ----------------
 
@@ -165,7 +186,7 @@
   let connOk = true;
   let busy = false;        // a button action is in flight
   const sel = { enemy: null, ally: null };
-  const ui = { tab: 'story', want: 'do', mode: 'do', panel: null, kick: null, give: null, unread: false, pinned: true };
+  const ui = { tab: 'story', want: 'do', mode: 'do', panel: null, kick: null, give: null, unread: false, pinned: true, enc: 'medium', lv: null };
   const logEls = new Map();
   const sigs = {};
   const seen = {};         // local clocks for "since" timers
@@ -460,6 +481,17 @@
       else if (p.hp < q.hp) A.call('sfx', 'hit');
       else if (p.hp > q.hp) A.call('sfx', 'heal');
     }
+    // New achievements and level-ups get a toast (one, so neither hides the other).
+    const notes = [];
+    const had = new Set((Array.isArray(old.achievements) ? old.achievements : []).map((a) => a.id + '|' + a.who));
+    const fresh2 = (Array.isArray(s.achievements) ? s.achievements : []).filter((a) => !had.has(a.id + '|' + a.who) && ACHIEVEMENTS[a.id]);
+    if (fresh2.length) {
+      notes.push('Achievement unlocked: ' + fresh2.map((a) => ACHIEVEMENTS[a.id].name + (a.who !== 'party' && s.players[a.who] ? ` (${s.players[a.who].name})` : '')).join(', ') + '.');
+      A.call('sfx', 'notify');
+    }
+    if (p && q && (p.pending || []).length > (q.pending || []).length) notes.push(`Level ${p.level}! Choose your upgrade in the Pack tab.`);
+    if (notes.length) toast(notes.join(' '), 'info');
+    if (s.dm && old.dm && !!s.dm.paused !== !!old.dm.paused && s.host !== myId) toast(s.dm.paused ? 'The host paused the Dungeon Master.' : 'The Dungeon Master is back.', 'info');
     const turnNow = s.phase === 'combat' && !!s.combat && s.combat.turn === myId;
     const turnWas = old.phase === 'combat' && !!old.combat && old.combat.turn === myId;
     if (turnNow && !turnWas) { A.call('sfx', 'turn'); attention('Your turn! · AI-DnD'); }
@@ -472,7 +504,40 @@
 
   const pct = (a, b) => Math.max(0, Math.min(100, b ? (a / b) * 100 : 0)) + '%';
   const bar = (cls, a, b) => h('div', { class: 'bar ' + cls }, h('i', { style: { width: pct(a, b) } }));
-  const fxTags = (c) => (c.fx || []).map((f) => h('span', { class: 'tag ' + (FX[f.k] || ['', ''])[1] }, (FX[f.k] || [f.k])[0]));
+  const fxInfo = (f) => {
+    const d = FX[f.k] || [String(f.k), '', ''];
+    const turns = f.t > 0 && f.t < 50 ? ` (${f.t} more turn${f.t === 1 ? '' : 's'})` : '';
+    return { label: d[0], cls: d[1], desc: d[2].replace('{v}', String(f.v || 0)) + turns };
+  };
+  const fxTags = (c) => (c.fx || []).map((f) => {
+    const i = fxInfo(f);
+    return h('span', { class: `tag fx fx-${String(f.k).replace(/[^a-z]/g, '')} ${i.cls}`, title: i.desc }, i.label, h('span', { class: 'sr' }, ': ' + i.desc));
+  });
+  // Death saves: three successes and three failures as pips (null while the hero stands).
+  function savePips(p) {
+    if (!p || !p.cls || p.alive !== false) return null;
+    if (p.dead) return h('div', { class: 'saves dead' }, h('span', { class: 'tag bad' }, 'Dead'), h('span', { class: 'hint' }, 'Resurrection or a temple'));
+    const d = p.dying || { s: 0, f: 0, stable: false };
+    const pips = (n, cls) => h('span', { class: 'pips ' + cls, 'aria-hidden': 'true' }, [0, 1, 2].map((i) => h('i', { class: i < Math.min(3, n) ? 'on' : '' })));
+    return h('div', { class: 'saves' + (d.stable ? ' stable' : ''), role: 'img', 'aria-label': d.stable ? 'Stable: out of the fight but no longer dying' : `Death saves: ${d.s} of 3 successes, ${Math.min(3, d.f)} of 3 failures` },
+      h('span', { class: 'tag ' + (d.stable ? 'warn' : 'bad') }, d.stable ? 'Stable' : 'Dying'),
+      h('span', { class: 'pip-grp' }, h('small', null, 'saves'), pips(d.s, 'ok')),
+      h('span', { class: 'pip-grp' }, h('small', null, 'fails'), pips(d.f, 'bad')));
+  }
+  // A six-segment threat clock, drawn as inline SVG.
+  function threatClock(th, size) {
+    const max = Math.max(1, Math.min(12, Number(th.max) || 6));
+    const val = Math.max(0, Math.min(max, Number(th.value) || 0));
+    const r = 10, c = 12, gap = 0.12;
+    const pt = (a, rr) => `${(c + rr * Math.sin(a)).toFixed(2)} ${(c - rr * Math.cos(a)).toFixed(2)}`;
+    const segs = [];
+    for (let i = 0; i < max; i++) {
+      const a0 = (i / max) * Math.PI * 2 + gap / 2, a1 = ((i + 1) / max) * Math.PI * 2 - gap / 2;
+      segs.push(sv('path', { d: `M${c} ${c} L${pt(a0, r)} A${r} ${r} 0 0 1 ${pt(a1, r)} Z`, class: i < val ? 'on' : 'off' }));
+    }
+    return h('span', { class: 'clock' + (val >= max ? ' full' : ''), role: 'img', 'aria-label': `Threat: ${th.name}, ${val} of ${max}` },
+      sv('svg', { viewBox: '0 0 24 24', width: size, height: size, 'aria-hidden': 'true', focusable: 'false' }, sv('circle', { cx: c, cy: c, r: r + 1.4, class: 'rim' }), segs));
+  }
   const cdOf = (p, kind, id) => ((p.cds || {})[kind + ':' + id]) || 0;
   const mod = (score) => { const m = Math.floor((score - 10) / 2); return (m >= 0 ? '+' : '') + m; };
 
@@ -553,7 +618,32 @@
       const t = b.getAttribute('data-tab');
       b.setAttribute('aria-pressed', String(t === ui.tab));
       b.classList.toggle('unread', t === 'story' && ui.unread && ui.tab !== 'story');
+      if (t === 'pack') {
+        const up = !!me() && (me().pending || []).length > 0;
+        b.classList.toggle('lvl', up);
+        if (up) b.setAttribute('aria-label', 'Pack: level up waiting'); else b.removeAttribute('aria-label');
+      }
     });
+  }
+
+  // Above the place name: the chapter, a compact threat clock, the scene mood and a paused DM.
+  function renderArc() {
+    const box = $('arcBar');
+    if (!box) return;
+    const st = state.story || {};
+    const th = st.threat && st.threat.name ? st.threat : null;
+    const mood = (state.opts || {}).mood || '';
+    const paused = !!(state.dm || {}).paused;
+    const on = state.phase !== 'lobby' && (!!st.chapter || !!th || !!mood || paused);
+    box.hidden = !on;
+    paint('arc', box, [on, st.chapter, th, mood, paused], () => !on ? [] : [
+      !!st.chapter && h('span', { class: 'arc-ch' }, h('span', { class: 'lbl' }, 'Chapter'), h('b', null, st.chapter)),
+      !!th && h('button', { type: 'button', class: 'arc-th' + (th.value >= th.max ? ' full' : ''), 'data-k': 'arc-threat', title: `Threat: ${th.name} (${th.value} of ${th.max}). Open the Journal.`,
+        onclick: () => { ui.tab = 'journal'; render(); const j = $('jThreat'); if (j && j.scrollIntoView) j.scrollIntoView({ block: 'nearest' }); } },
+      threatClock(th, 20), h('span', { class: 'arc-th-nm' }, th.name)),
+      !!mood && h('span', { class: 'chip mood', title: 'Scene mood set by the host' }, (MOODS.find((m) => m[0] === mood) || [mood, mood])[1]),
+      paused && h('span', { class: 'chip bad paused-chip' }, 'DM paused'),
+    ]);
   }
 
   function renderScene() {
@@ -1229,8 +1319,17 @@
     const queue = Array.isArray(dm.queue) ? dm.queue : [];
     const names = state.order.map((id) => [id, nameOf(id)]);
 
-    paint('dm', box, [dm.busy, queue, ck, dm.note, nudge, mine, open, names, lobby], () => {
+    const paused = !!dm.paused && !lobby;
+    const hostName = nameOf(state.host);
+    paint('dm', box, [dm.busy, queue, ck, dm.note, nudge, mine, open, names, lobby, paused, isHost(), hostName], () => {
       const kids = [];
+      if (paused) {
+        kids.push(h('div', { class: 'paused', role: 'status' },
+          h('span', { class: 'pause-ic', 'aria-hidden': 'true' }, h('i'), h('i')),
+          h('span', { class: 'paused-tx' }, h('b', null, 'The Dungeon Master is paused'),
+            h('span', null, isHost() ? 'Talk it over at the table. What you send waits until you resume.' : `${hostName} paused the story. Talk it over; what you send waits until the host resumes.`)),
+          isHost() && btn('Resume', null, { t: 'pause' }, { cls: 'primary', k: 'dm-resume' })));
+      }
       if (ck) {
         const whoName = who ? who.name : 'a missing adventurer';
         kids.push(h('div', { class: 'check' + (mine ? ' mine' : '') },
@@ -1296,17 +1395,71 @@
     return Object.keys(p.inv || {}).filter((id) => p.inv[id] > 0 && ITEMS[id] && ITEMS[id].type === 'consumable');
   }
 
-  function directorPanel() {
+  function directorBox() {
     const go = async () => {
       const text = keepVal('director').trim();
       if (!text) { toast('Write a note for the Dungeon Master first.'); return; }
       const okSent = await send({ t: 'director', text });
-      if (okSent) { keepSet('director', ''); ui.panel = null; render(); toast('Note sent to the Dungeon Master.', 'info'); }
+      if (okSent) { keepSet('director', ''); toast('Note sent to the Dungeon Master.', 'info'); }
     };
-    return h('div', { class: 'sub' },
-      h('p', { class: 'hint' }, 'Host only. An out-of-character instruction to the Dungeon Master: steer the story, change the pace, set a boundary. The other players do not see it as story.'),
-      h('textarea', { rows: 2, maxlength: 400, 'data-keep': 'director', 'aria-label': 'Director’s note', placeholder: 'e.g. Wrap up the tavern and get us on the road.' }),
-      h('div', { class: 'row' }, btn('Send to the DM', null, go, { cls: 'primary', k: 'director-go' })));
+    return h('div', { class: 'ht-sec' },
+      h('label', { class: 'lbl', for: 'directorInput' }, 'Director’s note'),
+      h('div', { class: 'row' },
+        h('textarea', { id: 'directorInput', rows: 2, maxlength: 400, 'data-keep': 'director', placeholder: 'e.g. Wrap up the tavern and get us on the road.' }),
+        btn('Send to the DM', null, go, { k: 'director-go' })),
+      h('p', { class: 'hint' }, 'An out-of-character instruction: steer the story, change the pace, set a boundary. The others do not see it as story.'));
+  }
+
+  // Host tools: one compact panel for pausing the DM, redoing its last reply, the scene mood,
+  // starting an encounter and the director's note.
+  function hostPanel() {
+    const dm = state.dm || {};
+    const o = state.opts || {};
+    const scene = state.phase === 'scene';
+    const lvl = ENCOUNTERS.some((e) => e[0] === ui.enc) ? ui.enc : 'medium';
+    const moodSel = h('select', { id: 'moodSel', 'data-k': 'ht-mood',
+      onchange: async (ev) => { if (!(await send({ t: 'opts', mood: ev.target.value }))) { delete sigs.dock; render(); } else toast(ev.target.value ? `Scene mood: ${(MOODS.find((m) => m[0] === ev.target.value) || ['', ev.target.value])[1]}.` : 'The DM sets the mood again.', 'info'); } },
+    MOODS.map((m) => h('option', { value: m[0], selected: (o.mood || '') === m[0] }, m[1])));
+    return h('div', { class: 'sub host-tools', role: 'group', 'aria-labelledby': 'htHead' },
+      h('div', { class: 'ht-head' }, h('b', { id: 'htHead' }, 'Host tools'), h('span', { class: 'hint' }, 'Only you see these.')),
+      h('div', { class: 'ht-grid' },
+        h('div', { class: 'ht-sec' },
+          h('span', { class: 'lbl' }, 'Dungeon Master'),
+          h('div', { class: 'btns' },
+            btn(dm.paused ? 'Resume the DM' : 'Pause the DM', null, { t: 'pause' }, { cls: dm.paused ? 'primary' : '', k: 'ht-pause', title: dm.paused ? 'Let the Dungeon Master answer again.' : 'Hold the story while the table talks. Messages wait.' }),
+            btn('Redo last reply', null, { t: 'regen' }, { k: 'ht-regen', disabled: !state.canRedo || !!dm.busy,
+              title: state.canRedo ? 'Take back the AI Dungeon Master’s last reply and ask again.' : 'Available right after an AI Dungeon Master reply, before anything else happens.' }))),
+        h('div', { class: 'ht-sec' },
+          h('label', { class: 'lbl', for: 'moodSel' }, 'Scene mood'), moodSel),
+        h('div', { class: 'ht-sec ht-enc' },
+          h('span', { class: 'lbl', id: 'encLbl' }, 'Start an encounter'),
+          h('div', { class: 'row' },
+            h('div', { class: 'modes seg', role: 'radiogroup', 'aria-labelledby': 'encLbl' }, ENCOUNTERS.map(([id, label]) =>
+              h('button', { type: 'button', role: 'radio', 'aria-checked': String(lvl === id), 'data-k': 'enc-' + id, class: id === 'deadly' ? 'deadly' : '', disabled: !scene,
+                onclick: () => { ui.enc = id; render(); } }, label))),
+            btn('Start', null, { t: 'encounter', level: lvl }, { cls: lvl === 'deadly' ? 'danger' : 'primary', k: 'enc-go', disabled: !scene })),
+          !scene && h('p', { class: 'hint' }, 'Encounters start from a scene, not mid-fight.'))),
+      directorBox());
+  }
+
+  // "Level up!" in the dock: impossible to miss, but it never blocks play.
+  function levelBanner(p) {
+    const offer = (p.pending || [])[0];
+    if (!offer) return null;
+    return h('div', { class: 'lvl-banner', role: 'status' },
+      h('span', { class: 'lvl-badge', 'aria-hidden': 'true' }, String(offer.level)),
+      h('span', { class: 'lvl-tx' }, h('b', null, 'Level up!'), h('span', null, `Level ${offer.level}: choose an upgrade${p.pending.length > 1 ? ` (${p.pending.length} waiting)` : ''}.`)),
+      btn('Choose', null, () => openPack('lvlCard'), { cls: 'primary', k: 'lvl-go' }));
+  }
+
+  const isDying = (q) => !!q && !!q.cls && q.alive === false && !q.dead && !!q.dying && !q.dying.stable;
+  function downNote(p) {
+    if (p.alive !== false) return null;
+    if (p.dead) return h('p', { class: 'down-note bad' }, h('b', null, 'You have died. '), 'A Resurrection spell from an ally, or a priest in town (100 gold, paid by any of the party where a merchant is), can bring you back.');
+    const d = p.dying || { s: 0, f: 0 };
+    if (d.stable) return h('p', { class: 'down-note' }, h('b', null, 'You are stable. '), 'Out of the fight but no longer dying: you get back up when it is won, or when someone heals you.');
+    return h('div', { class: 'down-note bad' }, savePips(p),
+      h('p', null, h('b', null, 'You are dying. '), 'Each of your turns rolls a death save: 10 or more is a success. Three successes and you are stable, three failures and you die. An ally can heal you or stabilise you.'));
   }
 
   function renderDock() {
@@ -1317,38 +1470,58 @@
     box.hidden = false;
     const c = state.combat;
     const idle = ph === 'combat' && !!c ? sinceSeen('turn', c.turn + ':' + state.turnSince, state.turnSince) > IDLE_SKIP_MS : false;
-    const roster = state.order.map((id) => { const q = state.players[id]; return q ? [id, q.name, q.online] : [id]; });
+    const roster = state.order.map((id) => { const q = state.players[id]; return q ? [id, q.name, q.online, q.alive, q.dead, q.dying, q.hp] : [id]; });
+    const host = isHost();
 
-    paint('dock', box, [ph, p, state.scene, c, ui.panel, sel, idle, state.host, roster], () => {
+    paint('dock', box, [ph, p, state.scene, c, ui.panel, ui.enc, sel, idle, state.host, roster, state.map && state.map.layout, host && [state.dm && state.dm.paused, state.dm && !!state.dm.busy, state.canRedo, (state.opts || {}).mood]], () => {
       const kids = [];
       if (!p.cls) {
         kids.push(h('div', { class: 'turn' }, 'Create your character to join the story'),
           h('p', { class: 'hint' }, 'Finish the character creator and press Create character. You join the party straight away.'));
         return kids;
       }
+      kids.push(levelBanner(p));
+      const hostBtn = host && toggleBtn('Host tools', 'host only', 'host');
       if (ph === 'scene') {
         const sc = state.scene || {};
         const heals = (p.spells || []).filter((id) => SPELLS[id] && SPELLS[id].spell_type === 'Heal');
+        const layout = state.map && state.map.layout;
+        const risky = !sc.shop && !(layout && SAFE_LAYOUTS.includes(layout));
+        const shorts = Number(sc.short) || 0;
+        const hd = Math.max(0, Number(p.hd) || 0);
+        const dead = state.order.map((id) => state.players[id]).filter((q) => q && q.cls && q.dead);
+        kids.push(downNote(p));
         kids.push(h('div', { class: 'btns qa' },
-          btn('Rest', sc.rested ? 'already rested here' : 'once per location', { t: 'rest' }, { disabled: !!sc.rested }),
+          btn(['Short rest', h('span', { class: 'badge', 'aria-hidden': 'true' }, `HD ${hd}/${p.level}`)], `${Math.max(0, 2 - shorts)} of 2 left here`, { t: 'shortrest' }, {
+            k: 'rest-short', disabled: shorts >= 2,
+            title: shorts >= 2 ? 'Two short rests already taken here. Move on, or take a long rest.' : `An hour's rest: everyone spends one hit die (d${HIT_DIE[p.cls] || 8} + CON) to heal and gets back some mana. You have ${hd} of ${p.level} hit dice. ${2 - shorts} of 2 short rests left here.` }),
+          btn(['Long rest', !sc.rested && risky && h('span', { class: 'badge warn' }, 'risky')], sc.rested ? 'already rested here' : risky ? 'unsafe place' : 'safe place', { t: 'rest' }, {
+            k: 'rest-long', disabled: !!sc.rested,
+            title: sc.rested ? 'The party has already taken a long rest here.' : `Full HP, mana and hit dice for everyone. Once per place.${risky ? ' Risky here: something may find you while you sleep. Inns, towns, docks and camps are safe.' : ''}` }),
           !!sc.shop && btn('Trade with the merchant', `${p.gold} gold`, openTrade, { cls: 'primary', k: 'trade-open' }),
+          !!sc.shop && dead.map((q) => btn(`Raise ${q.id === myId ? 'yourself' : q.name}`, '100 gold', { t: 'raise', target: q.id },
+            { k: 'raise-' + q.id, disabled: p.gold < 100, title: p.gold < 100 ? `The priest asks 100 gold. You have ${p.gold}.` : `Pay a priest 100 gold to call ${q.name} back to life.` })),
           heals.map((id) => spellBtn(p, id)),
           others().some((id) => !!state.players[id].cls) && btn('Give…', 'item or gold', () => { ui.give = ui.give || { what: 'gold' }; openPack('sheetBox'); }),
           btn('Recap', 'the story so far', { t: 'recap' }),
           btn('Steer away', 'move the story on', { t: 'steer' }),
-          isHost() && toggleBtn('Director’s note', 'host only', 'director')));
-        if (ui.panel === 'director' && isHost()) kids.push(directorPanel());
+          hostBtn));
+        if (risky && !sc.rested) kids.push(h('p', { class: 'hint rest-hint' }, 'Resting here is risky: a long rest may be ambushed. Inns, towns, docks, camps and merchants are safe.'));
       } else if (ph === 'combat' && c) {
         const cur = state.players[c.turn];
         if (myTurn()) {
           const foe = (c.enemies || []).find((e) => e.id === sel.enemy);
           const ally = state.players[sel.ally] || p;
           const pots = consumables(p);
+          const dying = state.order.filter((id) => id !== myId && isDying(state.players[id]));
           kids.push(h('div', { class: 'turn mine' }, `Round ${c.round} — your turn`),
             h('p', { class: 'hint' }, `Target: ${foe ? foe.name : '—'} · Ally: ${ally.id === myId ? 'yourself' : ally.name}`,
               h('span', { class: 'wide' }, '. Tap a foe or a party member to change.')),
+            dying.length > 0 && h('p', { class: 'hint warn-line' }, `${dying.map(nameOf).join(' and ')} ${dying.length > 1 ? 'are' : 'is'} dying. Stabilise them, or heal them (spell or potion) to bring them back up.`),
             h('div', { class: 'btns' },
               btn('Attack', `ATK ${atkOf(p)}`, { t: 'attack', target: sel.enemy }, { cls: 'primary' }),
+              dying.map((id) => btn(`Stabilise ${nameOf(id)}`, 'WIS check, adjacent', { t: 'stabilize', target: id },
+                { k: 'stab-' + id, title: `Walk next to ${nameOf(id)} and make a DC 10 Wisdom check. On a success they stop rolling death saves.` })),
               abilitiesOf(p).map((id) => {
                 const a = ABILITIES[id];
                 const cd = cdOf(p, 'a', id);
@@ -1361,7 +1534,8 @@
               btn('Defend', 'brace this round', { t: 'defend' }),
               btn('End turn', c.left > 0 ? `${c.left} sq. unused` : 'pass', { t: 'endturn' }, { k: 'endturn' }),
               toggleBtn('Improvise…', 'free-form d20', 'attempt'),
-              pots.length > 0 && toggleBtn('Items', `${pots.length} usable`, 'items')));
+              pots.length > 0 && toggleBtn('Items', `${pots.length} usable`, 'items'),
+              hostBtn));
           if (ui.panel === 'attempt') kids.push(attemptPanel());
           if (ui.panel === 'items' && pots.length) {
             kids.push(h('div', { class: 'sub' }, h('div', { class: 'btns' }, pots.map((id) =>
@@ -1369,15 +1543,17 @@
           }
         } else {
           const canSkip = !!cur && (cur.online === false || idle);
-          kids.push(h('div', { class: 'turn' }, `Round ${c.round} — ${cur ? cur.name : '…'}’s turn`),
-            h('p', { class: 'hint' }, p.alive ? 'Wait for your turn. You can still ask the DM a question, talk to the table and equip gear.' : 'You are down. An ally can raise you, or you will get up when the fight is won.'));
-          if (canSkip) kids.push(h('div', { class: 'btns' }, btn(`Skip ${cur.name}’s turn`, cur.online === false ? 'disconnected' : 'idle', { t: 'skip' }, { k: 'skip' })));
+          kids.push(h('div', { class: 'turn' }, `Round ${c.round} — ${cur ? cur.name : '…'}’s turn`));
+          if (p.alive !== false) kids.push(h('p', { class: 'hint' }, 'Wait for your turn. You can still ask the DM a question, talk to the table and equip gear.'));
+          else kids.push(downNote(p));
+          if (canSkip || hostBtn) kids.push(h('div', { class: 'btns' }, canSkip && btn(`Skip ${cur.name}’s turn`, cur.online === false ? 'disconnected' : 'idle', { t: 'skip' }, { k: 'skip' }), hostBtn));
         }
       } else if (ph === 'defeat') {
         kids.push(h('div', { class: 'turn' }, 'The party has fallen'),
           h('p', { class: 'hint' }, 'All is not lost. Regroup to pick yourselves up and carry on.'),
-          h('div', { class: 'btns' }, btn('Regroup', null, { t: 'regroup' }, { cls: 'primary' })));
+          h('div', { class: 'btns' }, btn('Regroup', null, { t: 'regroup' }, { cls: 'primary' }), hostBtn));
       }
+      if (ui.panel === 'host' && host) kids.push(hostPanel());
       return kids;
     });
   }
@@ -2259,7 +2435,7 @@
       return;
     }
     if (ui.give && state.phase === 'combat') ui.give = null;
-    renderHeader(); renderTabs(); renderScene(); renderLobby(); renderDm(); renderDock();
+    renderHeader(); renderTabs(); renderArc(); renderScene(); renderLobby(); renderDm(); renderDock();
     renderComposer(); renderParty(); renderSheet(); renderTrade(); renderJournal(); renderLog();
   }
 
@@ -2291,6 +2467,7 @@
     $('autoplayBox').disabled = !hasAudio;
     $('audioNote').hidden = hasAudio;
     $('exportBtn').hidden = !canExport();
+    $('journalBtn').hidden = !canExport() || state.phase === 'lobby';
     $('saveFileBtn').hidden = isArtifact();
     const o = (state && state.opts) || {};
     $('tableSet').hidden = !isHost();
@@ -2485,6 +2662,7 @@
   });
   $('helpBtn').addEventListener('click', () => openDlg('helpDlg'));
   $('exportBtn').addEventListener('click', exportStory);
+  $('journalBtn').addEventListener('click', downloadJournal);
   $('saveFileBtn').addEventListener('click', downloadSave);
   $('loadSaveBtn').addEventListener('click', () => $('loadSave').click());
   $('loadSave').addEventListener('change', (ev) => { const f = ev.target.files && ev.target.files[0]; ev.target.value = ''; loadSaveFile(f); });
