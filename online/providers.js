@@ -826,12 +826,55 @@ function geminiVoice(env, opts) {
  * VOICE_PROVIDER wins when set ('browser' / 'off' -> null); otherwise ElevenLabs when its key
  * is set, else Gemini speech when its key is set, else null (clients use browser speech).
  */
+/**
+ * Soprano (github.com/ekwek1/soprano): a small open-source voice model you run yourself.
+ * Its server speaks the OpenAI speech API: POST {SOPRANO_URL}/v1/audio/speech {input} -> WAV.
+ * One voice, English only, no emotion tags.
+ */
+function sopranoVoice(env, opts) {
+  let base = String(env.SOPRANO_URL || '').trim();
+  if (!base && env.SOPRANO_HOSTPORT) base = 'http://' + String(env.SOPRANO_HOSTPORT).trim();
+  base = trimSlash(base);
+  const key = String(env.SOPRANO_API_KEY || '').trim();
+  const dataDir = opts && opts.dataDir ? String(opts.dataDir) : '';
+  const E = errorFactory('soprano', key ? [key] : []);
+  const cache = createAudioCache(dataDir && path.join(dataDir, 'tts'), 'wav', num(env.VOICE_CACHE_MB, 64, 1, 4096) * 1024 * 1024);
+  const limit = createLimiter(num(env.SOPRANO_CONCURRENCY, 2, 1, 16));
+  const flights = new Map();
+  let chars = 0;
+  const httpError = (res, text) => E(res.status >= 500 || res.status === 429 ? 'upstream' : res.status === 401 || res.status === 403 ? 'auth' : 'bad_request',
+    `HTTP ${res.status} ${String(text || '').slice(0, 160)}`, { status: res.status, retryable: res.status >= 500 || res.status === 429 });
+  const readAudio = async (res) => {
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length < 44) throw E('upstream', 'empty audio in the reply', { retryable: true });
+    return buf;
+  };
+  async function speak(args) {
+    const a = args || {};
+    const text = speechText(stripTags(a.text));
+    if (!text) throw E('bad_request', 'nothing to say');
+    const cacheKey = sha(`soprano|${base}|${text}`);
+    return singleFlight(flights, cacheKey, async () => {
+      const hit = await cache.get(cacheKey);
+      if (hit) return { mime: 'audio/wav', buffer: hit, cached: true, voiceId: 'soprano' };
+      const headers = key ? { authorization: `Bearer ${key}` } : {};
+      const buffer = await limit(() => postForAudio(E, `${base}/v1/audio/speech`, headers, { input: text, model: 'soprano', voice: archetypeOf(a.voice), response_format: 'wav' }, num(env.SOPRANO_TIMEOUT_MS, 60000, 5000, 300000), httpError, readAudio));
+      chars += text.length;
+      await cache.put(cacheKey, buffer);
+      return { mime: 'audio/wav', buffer, cached: false, voiceId: 'soprano' };
+    });
+  }
+  return { name: 'soprano', model: 'soprano', speak, sfx: async () => null, get chars() { return chars; }, info: () => ({ url: base }) };
+}
+
 function createVoice(env, opts) {
   const e = env || {};
   const pick = lower(e.VOICE_PROVIDER);
   if (pick === 'browser' || pick === 'off' || pick === 'none') return null;
-  let name = pick === 'elevenlabs' || pick === 'gemini' ? pick : '';
-  if (!name) name = e.ELEVENLABS_API_KEY ? 'elevenlabs' : e.GEMINI_API_KEY ? 'gemini' : '';
+  let name = pick === 'elevenlabs' || pick === 'gemini' || pick === 'soprano' ? pick : '';
+  const soprano = !!(e.SOPRANO_URL || e.SOPRANO_HOSTPORT);
+  if (!name) name = soprano ? 'soprano' : e.ELEVENLABS_API_KEY ? 'elevenlabs' : e.GEMINI_API_KEY ? 'gemini' : '';
+  if (name === 'soprano') return soprano ? sopranoVoice(e, opts) : null;
   if (name === 'elevenlabs') return e.ELEVENLABS_API_KEY ? elevenVoice(e, opts) : null;
   if (name === 'gemini') return e.GEMINI_API_KEY ? geminiVoice(e, opts) : null;
   return null;

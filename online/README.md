@@ -51,12 +51,36 @@ ANTHROPIC_API_KEY=your-key ELEVENLABS_API_KEY=your-key node server.js
 | `ELEVENLABS_API_KEY` | – | Narrator and NPC voices, generated ambience |
 | `ELEVENLABS_MODEL` | `eleven_v4` | ElevenLabs speech model. `eleven_flash_v2_5` is faster and half the price, without emotion tags |
 | `ELEVENLABS_VOICE_<ARCHETYPE>` | built-in cast | Override a voice id, e.g. `ELEVENLABS_VOICE_NARRATOR` |
-| `VOICE_PROVIDER` | auto | Force `elevenlabs`, `gemini`, `browser` or `off` |
+| `SOPRANO_URL` | – | Use a self-hosted [Soprano](https://github.com/ekwek1/soprano) voice server instead of ElevenLabs, e.g. `http://soprano:8000` |
+| `VOICE_PROVIDER` | auto | Force `soprano`, `elevenlabs`, `gemini`, `browser` or `off`. Auto picks Soprano, then ElevenLabs, then Gemini |
 | `VOICE_CHAR_BUDGET` | `40000` | Characters of speech per party per day |
 | `DATA_DIR` | `./data` | Saved parties and the audio cache |
 
 The ElevenLabs key needs the **Text to Speech** permission (and **Sound Effects**
 for generated ambience). It does not need to list voices.
+
+## Free, self-hosted voice: Soprano
+
+[Soprano](https://github.com/ekwek1/soprano) is a small open-source voice model
+(80M parameters, Apache-2.0) that runs on an ordinary CPU, about one to two
+seconds per line. It has one voice, speaks English only and ignores emotion
+tags, so NPCs sound the same as the narrator. It needs about 1.2 GB of memory,
+more than Render's free plan gives.
+
+Run it next to the game and point the game at it:
+
+```bash
+cd online/soprano
+docker build -t soprano .
+docker run -p 8000:8000 soprano
+SOPRANO_URL=http://localhost:8000 node ../server.js
+```
+
+On Render, create a **Private Service** from this repository with Root Directory
+`online/soprano` and Docker runtime on a plan with at least 2 GB of memory, then
+set `SOPRANO_URL=http://<service-name>:8000` on the game. Keep it private: the
+Soprano server has no password. `/healthz?voice=1` on the game shows whether it
+answers.
 
 ## Put it online
 

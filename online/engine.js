@@ -35,6 +35,12 @@
     mana_potion: { name: 'Mana Potion', type: 'consumable', description: 'A blue draught that restores 25 mana.', value: 40, equippable: false, slot: null, stats: {}, effects: [{ type: 'mana', value: 25, duration: 0 }] },
     spellbook: { name: 'Spellbook', type: 'tool', description: 'Margins full of frantic notes.', value: 0, equippable: false, slot: null, stats: {}, effects: [] },
     holy_symbol: { name: 'Holy Symbol', type: 'tool', description: 'Worn smooth by prayer.', value: 0, equippable: false, slot: null, stats: {}, effects: [] },
+    buckler: { name: 'Buckler', type: 'armor', description: 'A small round shield strapped to the forearm.', value: 15, rarity: 'common', equippable: true, slot: 'offhand', stats: { defense: 1 }, effects: [] },
+    shield: { name: 'Shield', type: 'armor', description: 'Oak boards bound in iron, scarred from use.', value: 35, rarity: 'common', equippable: true, slot: 'offhand', stats: { defense: 2 }, effects: [] },
+    tower_shield: { name: 'Tower Shield', type: 'armor', description: 'Tall enough to hide behind, heavy enough to regret.', value: 120, rarity: 'uncommon', equippable: true, slot: 'offhand', stats: { defense: 4 }, effects: [] },
+    ring_of_might: { name: 'Ring of Might', type: 'trinket', description: 'A copper band that hums when you make a fist.', value: 90, rarity: 'uncommon', equippable: true, slot: 'trinket', stats: { attack: 2 }, effects: [] },
+    amulet_of_warding: { name: 'Amulet of Warding', type: 'trinket', description: 'A silver ward that turns aside a glancing blow.', value: 90, rarity: 'uncommon', equippable: true, slot: 'trinket', stats: { defense: 2 }, effects: [] },
+    lucky_charm: { name: 'Lucky Charm', type: 'trinket', description: 'A rabbit\'s foot on a string. It has not helped the rabbit.', value: 30, rarity: 'common', equippable: true, slot: 'trinket', stats: { attack: 1 }, effects: [] },
   };
   const ITEMS = table(DATA.items, EXTRA_ITEMS);
   const SPELLS = table(DATA.spells);
@@ -91,7 +97,10 @@
     Boss: { hp: [80, 80], atk: [12, 13], def: 4, xp: 150, ability: 'bone_shield', loot: 'boss' },
   });
 
-  const SHOP = ['health_potion', 'mana_potion', 'greater_health_potion', 'strength_elixir', 'iron_sword', 'leather_armor', 'steel_longsword', 'chainmail'];
+  const SHOP = ['health_potion', 'mana_potion', 'greater_health_potion', 'strength_elixir', 'iron_sword', 'leather_armor', 'steel_longsword', 'chainmail', 'buckler', 'shield', 'lucky_charm', 'ring_of_might', 'amulet_of_warding'];
+  const SLOTS = ['weapon', 'armor', 'offhand', 'trinket'];
+  const CAPACITY = 20;                                      // different kinds of item a pack holds (stacks)
+  const sellPrice = (id) => (own(ITEMS, id) && ITEMS[id].type !== 'quest' ? Math.floor((ITEMS[id].value || 0) / 2) : 0);
   const ABILITY_NAMES = DM.ABILITIES;
   const MAX_PLAYERS = 5;
   const MAX_LOG = 120;
@@ -136,7 +145,7 @@
     while (taken.has(n.toLowerCase()) || same(n, 'party') || same(n, 'narrator')) n = `${name} ${i++}`;
     room.players[id] = {
       id, name: n, cls: null, bio: '', level: 1, xp: 0, hp: 0, maxHp: 0, mana: 0, maxMana: 0, atk: 0, def: 0,
-      gold: 0, inv: {}, eq: { weapon: null, armor: null }, spells: [], cds: {}, fx: [], alive: true, online: true, scores: {}, keep: [],
+      gold: 0, inv: {}, eq: { weapon: null, armor: null, offhand: null, trinket: null }, spells: [], cds: {}, fx: [], alive: true, online: true, scores: {}, keep: [],
     };
     room.order.push(id);
     if (!room.host || !own(room.players, room.host)) room.host = id;
@@ -177,7 +186,7 @@
     p.atk = c.atk; p.def = c.def;
     p.maxMana = p.mana = 50 + Math.max(abilityMod(c.scores.INT), abilityMod(c.scores.WIS)) * 10;
     p.inv = Object.assign({}, c.gear);
-    p.eq = { weapon: null, armor: null };
+    p.eq = { weapon: null, armor: null, offhand: null, trinket: null };
     c.equip.forEach((it) => { p.eq[ITEMS[it].slot] = it; });
     p.gold = rnd(10, 50);
     p.spells = (own(DATA.startingSpells, cls) ? DATA.startingSpells[cls] : []).slice();
@@ -199,7 +208,7 @@
   function gearStat(c, stat) {
     if (!c.eq) return 0;
     let s = 0;
-    for (const slot of ['weapon', 'armor']) { const it = c.eq[slot] && ITEMS[c.eq[slot]]; if (it && it.stats && it.stats[stat]) s += it.stats[stat]; }
+    for (const slot of SLOTS) { const it = c.eq[slot] && ITEMS[c.eq[slot]]; if (it && it.stats && it.stats[stat]) s += it.stats[stat]; }
     return s;
   }
   const atkOf = (c) => Math.max(1, c.atk + gearStat(c, 'attack') + fxSum(c, 'str') - fxSum(c, 'weak') - fxSum(c, 'slow'));
@@ -432,7 +441,21 @@
   }
 
   function addItem(p, item, qty) { p.inv[item] = (p.inv[item] || 0) + qty; }
-  function takeItem(p, item) { p.inv[item] -= 1; if (p.inv[item] <= 0) delete p.inv[item]; }
+  function takeItem(p, item, qty) {
+    p.inv[item] -= qty || 1;
+    if (p.inv[item] <= 0) delete p.inv[item];
+    // Whatever is no longer carried cannot stay equipped.
+    for (const slot of SLOTS) if (p.eq && p.eq[slot] === item && !own(p.inv, item)) p.eq[slot] = null;
+  }
+  const packFull = (p, item) => !own(p.inv, item) && Object.keys(p.inv).length >= CAPACITY;
+  /** Put loot in a hero's pack, or in the party stash when the pack is full. */
+  function stow(room, p, item, qty) {
+    if (!packFull(p, item)) { addItem(p, item, qty); return true; }
+    room.stash = room.stash || {};
+    room.stash[item] = (room.stash[item] || 0) + qty;
+    say(room, 'sys', `${p.name}'s pack is full, so the ${ITEMS[item] ? ITEMS[item].name : item} goes to the party stash.`);
+    return false;
+  }
   function lootText(loot) {
     return Object.keys(loot).map((id) => (id === 'gold_coin' ? `${loot[id]} gold` : `${loot[id] > 1 ? loot[id] + '× ' : ''}${ITEMS[id] ? ITEMS[id].name : id}`)).join(', ');
   }
@@ -451,7 +474,7 @@
         const share = Math.floor(loot[id] / party.length);
         party.forEach((m) => { m.gold += share; });
         p.gold += loot[id] - share * party.length;
-      } else addItem(p, id, loot[id]);
+      } else stow(room, p, id, loot[id]);
     }
   }
 
@@ -871,6 +894,7 @@
       if (!SHOP.includes(a.item) || !own(ITEMS, a.item)) return 'The merchant does not stock that.';
       const it = ITEMS[a.item];
       if (p.gold < it.value) return `Not enough gold. ${it.name} costs ${it.value}.`;
+      if (packFull(p, a.item)) return `Your pack is full (${CAPACITY} kinds of item). Sell, stash or drop something first.`;
       p.gold -= it.value;
       addItem(p, a.item, 1);
       say(room, 'sys', `${p.name} buys ${it.name} for ${it.value} gold.`);
@@ -920,8 +944,35 @@
         if (a.lang != null) room.opts.lang = clean(a.lang, 24).replace(/[^\p{L} -]/gu, '') || 'English';
       }
     } else if (a.t === 'equip') {
-      if (!own(ITEMS, a.item) || !own(p.inv, a.item) || !ITEMS[a.item].equippable) err = 'You cannot equip that.';
-      else { p.eq[ITEMS[a.item].slot] = a.item; say(room, 'sys', `${p.name} equips ${ITEMS[a.item].name}.`); }
+      if (!own(ITEMS, a.item) || !own(p.inv, a.item) || !ITEMS[a.item].equippable || !SLOTS.includes(ITEMS[a.item].slot)) err = 'You cannot equip that.';
+      else if (inCombatTurn(room, p) === false && room.phase === 'combat') err = 'Change your gear on your own turn.';
+      else { p.eq = p.eq || {}; p.eq[ITEMS[a.item].slot] = a.item; say(room, 'sys', `${p.name} equips ${ITEMS[a.item].name}.`); }
+    } else if (a.t === 'unequip') {
+      if (!SLOTS.includes(a.slot) || !p.eq || !p.eq[a.slot]) err = 'Nothing is equipped there.';
+      else if (room.phase === 'combat' && !inCombatTurn(room, p)) err = 'Change your gear on your own turn.';
+      else { const it = ITEMS[p.eq[a.slot]]; p.eq[a.slot] = null; say(room, 'sys', `${p.name} puts away ${it ? it.name : 'their gear'}.`); }
+    } else if (a.t === 'drop' || a.t === 'sell' || a.t === 'stash') {
+      const qty = Math.max(1, Math.min(99, Math.floor(Number(a.qty)) || 1));
+      const it = own(ITEMS, a.item) ? ITEMS[a.item] : null;
+      if (!it || !own(p.inv, a.item)) err = 'You do not have that item.';
+      else if (p.inv[a.item] < qty) err = `You only have ${p.inv[a.item]}.`;
+      else if (room.phase === 'combat') err = 'Not in the middle of a fight.';
+      else if (it.type === 'quest' && a.t !== 'stash') err = 'That is too important to part with.';
+      else if (a.t === 'sell' && !room.scene.shop) err = 'There is nobody here to buy it. Look for a merchant.';
+      else if (a.t === 'sell' && sellPrice(a.item) <= 0) err = 'Nobody will pay for that.';
+      else {
+        takeItem(p, a.item, qty);
+        const label = `${qty > 1 ? qty + '× ' : ''}${it.name}`;
+        if (a.t === 'sell') { const g = sellPrice(a.item) * qty; p.gold += g; say(room, 'sys', `${p.name} sells ${label} for ${g} gold.`); } else if (a.t === 'stash') { room.stash = room.stash || {}; room.stash[a.item] = (room.stash[a.item] || 0) + qty; say(room, 'sys', `${p.name} puts ${label} in the party stash.`); } else say(room, 'sys', `${p.name} discards ${label}.`);
+      }
+    } else if (a.t === 'unstash') {
+      const qty = Math.max(1, Math.min(99, Math.floor(Number(a.qty)) || 1));
+      const st = room.stash || {};
+      if (!own(ITEMS, a.item) || !own(st, a.item)) err = 'That is not in the party stash.';
+      else if (st[a.item] < qty) err = `The stash only holds ${st[a.item]}.`;
+      else if (room.phase === 'combat') err = 'Not in the middle of a fight.';
+      else if (packFull(p, a.item)) err = `Your pack is full (${CAPACITY} kinds of item). Stash or drop something first.`;
+      else { st[a.item] -= qty; if (st[a.item] <= 0) delete st[a.item]; addItem(p, a.item, qty); say(room, 'sys', `${p.name} takes ${qty > 1 ? qty + '× ' : ''}${ITEMS[a.item].name} from the party stash.`); }
     } else if (a.t === 'give') {
       const to = own(room.players, a.to) ? room.players[a.to] : null;
       if (room.phase === 'combat') err = 'Not in the middle of a fight.';
@@ -929,10 +980,8 @@
       else if (a.item != null) {
         if (!own(ITEMS, a.item) || !own(p.inv, a.item)) err = 'You do not have that item.';
         else {
-          if (p.eq.weapon === a.item && p.inv[a.item] === 1) p.eq.weapon = null;
-          if (p.eq.armor === a.item && p.inv[a.item] === 1) p.eq.armor = null;
-          takeItem(p, a.item); addItem(to, a.item, 1);
-          say(room, 'sys', `${p.name} gives ${ITEMS[a.item].name} to ${to.name}.`);
+          if (packFull(to, a.item)) { err = `${to.name}'s pack is full.`; } else { takeItem(p, a.item); addItem(to, a.item, 1); }
+          if (!err) say(room, 'sys', `${p.name} gives ${ITEMS[a.item].name} to ${to.name}.`);
         }
       } else {
         const gold = Math.floor(Number(a.gold));
@@ -1032,7 +1081,7 @@
   const budgetWord = (used, cap) => { const left = cap - used; return left <= 0 ? 'none' : left >= cap * 0.6 ? 'plenty' : 'a little'; };
   const allowedItems = (room) => {
     const cap = 60 * partyLevel(room) + 40;
-    return Object.keys(ITEMS).filter((id) => ['weapon', 'armor', 'consumable', 'treasure'].includes(ITEMS[id].type) && id !== 'gold_coin' && ITEMS[id].value > 0 && ITEMS[id].value <= cap);
+    return Object.keys(ITEMS).filter((id) => ['weapon', 'armor', 'trinket', 'consumable', 'treasure'].includes(ITEMS[id].type) && id !== 'gold_coin' && ITEMS[id].value > 0 && ITEMS[id].value <= cap);
   };
 
   function dmView(room, intents) {
@@ -1174,15 +1223,12 @@
         const id = String(e.item || '');
         if (!target || !own(ITEMS, id) || !allowedItems(room).includes(id) || b.items + 1 > BUDGET.items) { denied = true; return; }
         b.items += 1;
-        addItem(target, id, 1);
-        say(room, 'sys', `${target.name} receives ${ITEMS[id].name}.`);
+        if (stow(room, target, id, 1)) say(room, 'sys', `${target.name} receives ${ITEMS[id].name}.`);
       } else if (e.type === 'take_item') {
         if (!target) return;
         const id = String(e.item || '');
         const keep = target.keep.findIndex((k) => same(k, e.name || e.item || ''));
         if (own(ITEMS, id) && own(target.inv, id)) {
-          if (target.eq.weapon === id && target.inv[id] === 1) target.eq.weapon = null;
-          if (target.eq.armor === id && target.inv[id] === 1) target.eq.armor = null;
           takeItem(target, id);
           say(room, 'sys', `${target.name} gives up ${ITEMS[id].name}.`);
         } else if (keep >= 0) { say(room, 'sys', `${target.name} gives up the ${target.keep[keep]}.`); target.keep.splice(keep, 1); }
@@ -1333,6 +1379,7 @@
 
   return {
     ITEMS, SPELLS, CLASSES, ABILITIES, MONSTERS, SHOP, ABILITY_NAMES, ADVENTURES, MAX_PLAYERS, IDLE_SKIP_MS, CHECK_TIMEOUT_MS, DM_STALE_MS,
+    SLOTS, CAPACITY, sellPrice,
     newRoom, addPlayer, act, atkOf, defOf, locationOf, dmNeeded, dmBegin, dmApply, dmFallback, dmView,
     LAYOUTS: Maps.LAYOUTS, walkable: Maps.walkable, pathTo, reachable, rangeOf, speedOf, dist: Maps.dist,
   };

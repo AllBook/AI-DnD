@@ -200,4 +200,24 @@ function party() {
   assert.ok(r.ok || /out of reach/.test(r.error), 'attacks walk into range or explain why not');
   if (!r.ok) assert.ok(E.act(room, hero.id, { t: 'endturn' }).ok);
 }
+{
+  // Inventory management: equip slots, unequip, stash, sell, drop, capacity.
+  const room = party();
+  const a = room.players.a;
+  room.scene.shop = true; a.gold = 500;
+  assert.ok(E.act(room, 'a', { t: 'buy', item: 'shield' }).ok && E.act(room, 'a', { t: 'equip', item: 'shield' }).ok && a.eq.offhand === 'shield');
+  const def = E.defOf(a);
+  assert.ok(E.act(room, 'a', { t: 'unequip', slot: 'offhand' }).ok && E.defOf(a) === def - 2, 'unequipping removes the bonus');
+  assert.ok(E.act(room, 'a', { t: 'equip', item: 'shield' }).ok);
+  const gold = a.gold;
+  assert.ok(E.act(room, 'a', { t: 'sell', item: 'shield' }).ok && a.gold === gold + E.sellPrice('shield') && a.eq.offhand === null, 'selling the last one unequips it');
+  assert.ok(E.act(room, 'a', { t: 'buy', item: 'health_potion' }).ok && E.act(room, 'a', { t: 'stash', item: 'health_potion' }).ok && room.stash.health_potion >= 1);
+  assert.ok(E.act(room, 'b', { t: 'unstash', item: 'health_potion' }).ok && room.players.b.inv.health_potion >= 1, 'anyone takes from the stash');
+  assert.ok(!E.act(room, 'a', { t: 'drop', item: 'nope' }).ok && E.act(room, 'a', { t: 'drop', item: 'lockpicks' }).ok && !a.inv.lockpicks);
+  a.keep = [];
+  a.inv.miners_note = 1;
+  assert.ok(!E.act(room, 'a', { t: 'drop', item: 'miners_note' }).ok, 'quest items cannot be thrown away');
+  for (const id of Object.keys(E.ITEMS).slice(0, 30)) a.inv[id] = a.inv[id] || 1;
+  assert.ok(!E.act(room, 'a', { t: 'buy', item: 'ring_of_might' }).ok || Object.keys(a.inv).length <= 30, 'a full pack refuses new kinds of item');
+}
 console.log('ok');
