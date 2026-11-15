@@ -45,7 +45,7 @@
   const MAX_PLAYERS = E.MAX_PLAYERS || 5;
   const IDLE_SKIP_MS = E.IDLE_SKIP_MS || 45000;
   const CHECK_TIMEOUT_MS = E.CHECK_TIMEOUT_MS || 30000;
-  const NUDGE_MS = 45000;
+  const NUDGE_MS = E.DM_STALE_MS || 45000;
   const atkOf = (c) => { try { return E.atkOf(c); } catch (e) { return c.atk; } };
   const defOf = (c) => { try { return E.defOf(c); } catch (e) { return c.def; } };
 
@@ -594,6 +594,15 @@
     }, h('span', { class: 'die', 'aria-hidden': 'true' }), label);
   }
 
+  // Queued intents. Table requests (host note, steer, recap) carry no player and no quoted text.
+  const QUEUE_NOTES = { director: ['host note', 'A note from the host for the Dungeon Master'], steer: ['steer', 'A request to move the story on'], recap: ['recap', 'A recap of the story so far'] };
+  function queueLine(it) {
+    const note = QUEUE_NOTES[it.kind];
+    if (note) return h('li', null, h('span', { class: 'tag' }, note[0]), ' ', note[1]);
+    if (!it.pid || !state.players[it.pid]) return h('li', null, h('span', { class: 'tag' }, 'table'), ' ', it.text);
+    return h('li', null, h('b', null, nameOf(it.pid)), ' ', h('span', { class: 'tag' }, (MODES[it.kind] || MODES.do).verb), ' ', it.text);
+  }
+
   function renderDm() {
     const box = $('dmBox');
     const dm = state.dm || {};
@@ -632,8 +641,7 @@
       if (queue.length) {
         kids.push(h('div', { class: 'queue' },
           h('span', { class: 'lbl' }, 'Waiting for the next reply:'),
-          h('ul', null, queue.map((it) => h('li', null,
-            h('b', null, nameOf(it.pid)), ' ', h('span', { class: 'tag' }, (MODES[it.kind] || MODES.do).verb), ' ', it.text)))));
+          h('ul', null, queue.map(queueLine))));
       }
       if (dm.note && !lobby) kids.push(h('p', { class: 'dm-note' }, dm.note));
       return kids;
@@ -723,7 +731,7 @@
           btn('Rest', sc.rested ? 'already rested here' : 'once per location', { t: 'rest' }, { disabled: !!sc.rested }),
           !!sc.shop && toggleBtn('Shop', `${p.gold} gold`, 'shop'),
           heals.map((id) => spellBtn(p, id)),
-          others().length > 0 && btn('Give…', 'item or gold', () => { ui.give = ui.give || { what: 'gold' }; ui.tab = 'pack'; render(); const el = $('sheetBox'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }),
+          others().some((id) => !!state.players[id].cls) && btn('Give…', 'item or gold', () => { ui.give = ui.give || { what: 'gold' }; ui.tab = 'pack'; render(); const el = $('sheetBox'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }),
           btn('Recap', 'the story so far', { t: 'recap' }),
           btn('Steer away', 'move the story on', { t: 'steer' }),
           isHost() && toggleBtn('Director’s note', 'host only', 'director')));
@@ -791,6 +799,7 @@
     });
     const ta = $('sayInput');
     ta.placeholder = MODES[ui.mode].hint;
+    ta.maxLength = ui.mode === 'talk' ? 300 : 400;
     ta.title = MODES[ui.mode].tip;
     $('sendBtn').textContent = ui.mode === 'ask' ? 'Ask' : ui.mode === 'talk' ? 'Talk' : 'Send';
     $('micBtn').hidden = !A.mic();
@@ -878,7 +887,7 @@
     if (micOn) { try { mic.stop(); } catch (e) { /* ignore */ } setMic(false); return; }
     const base = ta.value ? ta.value.replace(/\s*$/, ' ') : '';
     try {
-      mic.start((text) => { if (typeof text === 'string') { ta.value = (base + text).slice(0, 500); growSay(); } }, () => setMic(false));
+      mic.start((text) => { if (typeof text === 'string') { ta.value = (base + text).slice(0, 400); growSay(); } }, () => setMic(false));
       setMic(true);
     } catch (e) { setMic(false); toast('The microphone is not available.'); }
   }
@@ -928,7 +937,7 @@
 
   function givePanel(p) {
     const g = ui.give;
-    const people = others();
+    const people = others().filter((id) => !!state.players[id].cls);
     if (!g || !people.length) return null;
     const items = Object.keys(p.inv || {}).filter((id) => p.inv[id] > 0);
     const go = async () => {
@@ -962,7 +971,7 @@
     const p = me();
     const inCombat = state.phase === 'combat';
     const turn = myTurn();
-    const roster = others().map((id) => [id, nameOf(id)]);
+    const roster = others().filter((id) => !!state.players[id].cls).map((id) => [id, nameOf(id)]);
     paint('sheet', $('sheet'), [p, inCombat, turn, sel.ally, ui.give, roster, state.phase], () => {
       if (!p || !p.cls) return h('p', { class: 'hint' }, 'Choose a class and your sheet appears here.');
       const canUse = !inCombat || turn;
@@ -1209,22 +1218,18 @@
 
   // ---------------- join screen ----------------
 
-  // The code box takes a four-letter party code, or a rejoin code. A rejoin code
-  // is sent as the join token; the party code is read from its first four letters.
-  function parseCodeBox(raw, saved) {
+  // The code box takes a four-letter party code, or a rejoin code. A bare rejoin code is
+  // sent as the code itself (the transport finds the seat by it) and as the join token;
+  // "ABCD-XXXXXX" or "ABCD XXXXXX" sends the party code plus the rejoin code as the token.
+  function parseCodeBox(raw) {
     const v = String(raw || '').trim();
     const link = /#([A-Za-z]{4})$/.exec(v);
     if (link) return { code: link[1].toUpperCase() };
     if (/^[A-Za-z]{4}$/.test(v)) return { code: v.toUpperCase() };
-    const two = /^([A-Za-z]{4})\s+(\S+)$/.exec(v);
-    if (two) return { code: two[1].toUpperCase(), token: two[2].toUpperCase() };
-    const one = /^([A-Za-z]{4})[^A-Za-z0-9\s]\S+$/.exec(v);
-    if (one) return { code: one[1].toUpperCase(), token: v.toUpperCase() };
-    if (v.length > 4 && !/\s/.test(v)) {
-      const c = hashCode() || (saved && saved.code);
-      if (c) return { code: c, token: v.toUpperCase() };
-    }
-    return { error: 'Enter the four-letter party code your friend shared, or your rejoin code with the party code first (for example ABCD-XXXXXX).' };
+    const both = /^([A-Za-z]{4})[\s\-:_/.#]+([A-Za-z0-9]{5,})$/.exec(v);
+    if (both) return { code: both[1].toUpperCase(), token: both[2].toUpperCase() };
+    if (/^[A-Za-z0-9]{5,}$/.test(v)) return { code: v.toUpperCase(), token: v.toUpperCase() };
+    return { error: 'Enter the four-letter party code your friend shared, or your own rejoin code.' };
   }
 
   async function start(create) {
@@ -1235,7 +1240,7 @@
     let code = null;
     let token;
     if (!create) {
-      const parsed = parseCodeBox($('codeInput').value, saved);
+      const parsed = parseCodeBox($('codeInput').value);
       if (parsed.error) { joinNote(parsed.error); $('codeInput').focus(); return; }
       code = parsed.code;
       token = parsed.token || (saved && saved.code === code ? saved.token : undefined);
@@ -1245,7 +1250,11 @@
     try {
       const res = create ? await N.create(name) : await N.join(code, name, token);
       if (res && res.token) enter(res, name, saved);
-      else joinNote((res && res.error) || 'Could not reach the table. Try again.');
+      else {
+        // A stored seat that the table no longer knows must not block joining afresh.
+        if (!create && saved && saved.code === code && token === saved.token) store.set('aidnd.session', null);
+        joinNote((res && res.error) || 'Could not reach the table. Try again.');
+      }
     } catch (e) { joinNote('Could not reach the table. Check your connection.'); }
     setJoinBusy(false);
   }
