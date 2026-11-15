@@ -756,6 +756,7 @@
               }),
               (p.spells || []).map((id) => spellBtn(p, id)),
               btn('Defend', 'brace this round', { t: 'defend' }),
+              btn('End turn', c.left > 0 ? `${c.left} sq. unused` : 'pass', { t: 'endturn' }, { k: 'endturn' }),
               toggleBtn('Improvise…', 'free-form d20', 'attempt'),
               pots.length > 0 && toggleBtn('Items', `${pots.length} usable`, 'items')));
           if (ui.panel === 'attempt') kids.push(attemptPanel());
