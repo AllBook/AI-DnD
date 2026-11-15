@@ -110,6 +110,8 @@ function broadcast(entry) {
   const room = entry.room;
   room.ai = !!dm;
   room.voice = VOICE_MODE;
+  const vi = voiceIssue();
+  room.voiceIssue = vi ? vi.why : '';
   // Seats of players who left or were removed stop working.
   for (const pid of [...entry.seats.keys()]) if (!room.players[pid]) entry.seats.delete(pid);
   for (const c of [...entry.clients]) if (!room.players[c.pid]) { c.res.end(); entry.clients.delete(c); }
@@ -118,6 +120,21 @@ function broadcast(entry) {
   const msg = `data: ${snapshot(entry)}\n\n`;
   for (const c of entry.clients) c.res.write(msg);
 }
+
+// ---------------------------------------------------------------- voice health
+
+let lastVoiceError = null;
+function voiceFailed(err) {
+  const msg = String((err && err.message) || '');
+  let why = 'The voice service did not answer.';
+  if (/unusual|abuse|free tier|free_tier|detected_unusual_activity/i.test(msg)) why = 'ElevenLabs refused this free-plan key from a cloud server ("unusual activity"). A paid ElevenLabs plan, even the cheapest, fixes this.';
+  else if (err && err.code === 'auth') why = 'ElevenLabs rejected the API key: check ELEVENLABS_API_KEY and that it has the Text to Speech permission.';
+  else if (err && err.code === 'quota') why = 'The ElevenLabs account is out of characters for this month.';
+  else if (/paid_plan|402/i.test(msg)) why = 'This ElevenLabs plan cannot use these voices through the API.';
+  lastVoiceError = { why, code: (err && err.code) || 'error', detail: msg.slice(0, 200), at: Date.now() };
+}
+function voiceOk() { lastVoiceError = null; }
+const voiceIssue = () => (lastVoiceError && Date.now() - lastVoiceError.at < 15 * 60 * 1000 ? lastVoiceError : null);
 
 // ---------------------------------------------------------------- the Dungeon Master pump
 
@@ -226,7 +243,13 @@ const server = http.createServer(async (req, res) => {
       return res.end(dataJs);
     }
     if (req.method === 'GET' && url.pathname === '/healthz') {
-      return send(res, 200, { ok: true, rooms: rooms.size, dm: dm ? dm.name : 'scripted', voice: voice ? voice.name : VOICE_MODE });
+      const out = { ok: true, rooms: rooms.size, dm: dm ? dm.name : 'scripted', voice: voice ? voice.name : VOICE_MODE, voiceModel: voice ? voice.model : null };
+      // /healthz?voice=1 speaks one short word through the voice service to show whether it works.
+      if (url.searchParams.get('voice') === '1' && voice) {
+        try { const a = await voice.speak({ text: 'Ready.', voice: 'narrator' }); voiceOk(); out.voiceTest = `ok (${a.buffer.length} bytes of ${a.mime})`; } catch (err) { voiceFailed(err); out.voiceTest = 'failed'; }
+      }
+      out.voiceError = voiceIssue();
+      return send(res, 200, out);
     }
 
     if (req.method === 'POST' && url.pathname === '/api/create') {
@@ -296,9 +319,11 @@ const server = http.createServer(async (req, res) => {
       if (!seg) return send(res, 404, { error: 'No such line.' });
       try {
         const out = await speak(entry, seg);
+        voiceOk();
         res.writeHead(200, { 'content-type': out.mime, 'content-length': out.buffer.length, 'cache-control': 'private, max-age=86400' });
         return res.end(out.buffer);
       } catch (err) {
+        if (err.code !== 'budget') { voiceFailed(err); broadcast(entry); }
         if (err.code !== 'budget') console.warn(`[${entry.room.code}] voice failed: ${err.code || 'error'} ${String(err.message || '').slice(0, 160)}`);
         return send(res, err.code === 'budget' ? 429 : 502, { error: err.code === 'budget' ? 'The voice budget for today is used up.' : 'The voice service did not answer.' });
       }

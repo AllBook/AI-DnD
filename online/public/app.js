@@ -425,8 +425,11 @@
       state.ai ? 'A live AI model runs the Dungeon Master.' : 'No AI model is connected, so the built-in scripted Dungeon Master is running.');
     const v = state.voice || 'off';
     const voiced = A.has() && v !== 'off';
-    setChip($('voiceChip'), !voiced ? 'Voice off' : v === 'browser' ? 'Browser voice' : 'Voiced', voiced ? 'good' : '',
-      !voiced ? 'Narration is not being read aloud.' : v === 'browser' ? 'Your browser reads the narration aloud.' : 'The Dungeon Master and characters are voiced.');
+    if (voiced && state.voiceIssue) {
+      setChip($('voiceChip'), 'Voice problem', 'bad', state.voiceIssue + ' Until then your browser reads the narration.');
+      if (ui.voiceIssue !== state.voiceIssue) { ui.voiceIssue = state.voiceIssue; toast('Premium voice unavailable: ' + state.voiceIssue); }
+    } else setChip($('voiceChip'), !voiced ? 'Voice off' : v === 'browser' ? 'Browser voice' : 'Voiced', voiced ? (v === 'browser' ? '' : 'good') : '',
+      !voiced ? 'Narration is not being read aloud.' : v === 'browser' ? 'Your browser reads the narration aloud. Add an ElevenLabs key on the server for real voices.' : 'The Dungeon Master and characters are voiced.');
     renderConn();
   }
 
