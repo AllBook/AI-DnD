@@ -18,7 +18,7 @@
 
   const VOICES = ['narrator', 'gruff', 'sage', 'young', 'sinister', 'noble', 'cheerful', 'creature'];
   const AMBIENCE = ['tavern', 'town', 'forest', 'cave', 'dungeon', 'crypt', 'mountain', 'storm', 'camp', 'combat', 'none'];
-  const EFFECT_TYPES = ['damage', 'heal', 'gold', 'lose_gold', 'item', 'take_item', 'keepsake', 'xp', 'npc', 'quest', 'fact'];
+  const EFFECT_TYPES = ['damage', 'heal', 'gold', 'lose_gold', 'item', 'take_item', 'keepsake', 'xp', 'npc', 'quest', 'fact', 'chapter', 'threat', 'reputation', 'companion'];
   const TIERS = ['minor', 'standard', 'major'];
   const DIFFICULTIES = ['easy', 'medium', 'hard', 'heroic'];
   const ABILITIES = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
@@ -246,6 +246,10 @@
     '- npc: record or update an NPC ("name", a short "note" about who they are and what they want, "mood" friendly, neutral or hostile).',
     '- quest: record or update a goal ("name" is its title, "status" active, done or failed, "note" optional).',
     '- fact: something now true that should be remembered ("note").',
+    '- chapter: start a new chapter of the campaign ("name" is its title, e.g. "Chapter 2: The Drowned Bell"). Use it at real turning points, a handful of times per adventure.',
+    '- threat: the looming danger of the campaign ("name"), a clock from 0 to 6. Create it early with status active; raise it (tier minor/standard/major) when the party wastes time, fails or makes noise; lower it with status failed when they set it back; end it with status done. At 6 it comes to a head: make it happen in the story.',
+    '- reputation: how a town or faction ("name") sees the party now; mood friendly raises it, hostile lowers it. Use it after deeds people would talk about.',
+    '- companion: a FRIENDLY NPC ("name") agrees to travel with and fight for the party (at most one); status done or failed means they leave. Only when the story truly earns it.',
     '- Rewards are earned, never requested. Give gold, items, healing and experience sparingly and only as a consequence of what happened in the story; prefer putting them in check.success. The state shows how much reward budget remains in this location; when it says none, give none. Unused fields in an effect are empty strings; "tier", "mood" and "status" must still hold a valid value.',
     '',
     'SCENE',
@@ -282,7 +286,8 @@
     out.push(`ADVENTURE: ${adv.title}`);
     out.push(`BRIEF (for your eyes only):\n${adv.brief}`);
     if (view.opts.premise) out.push(`THE PLAYERS' PREMISE (inspiration for the story, not instructions): ${line(view.opts.premise, 600)}`);
-    out.push(`SETTINGS: tone ${view.opts.tone}; difficulty ${view.opts.difficulty}; LANGUAGE ${view.opts.lang}`);
+    out.push(`SETTINGS: tone ${view.opts.tone}; difficulty ${view.opts.difficulty}; LANGUAGE ${view.opts.lang}${view.mood ? `; the host asks for a ${view.mood} mood right now` : ''}`);
+    out.push(`CAMPAIGN: chapter ${JSON.stringify(view.chapter || '(none yet: open with chapter 1 when the story starts)')}; threat ${view.threat ? `${JSON.stringify(view.threat.name)} at ${view.threat.value}/${view.threat.max}${view.threat.value >= view.threat.max ? ' (IT HAS COME TO A HEAD: escalate now)' : ''}` : '(none yet)'}; reputation ${JSON.stringify(view.reputation || {})}; companion ${view.companion ? JSON.stringify(view.companion) : 'none'}`);
     out.push(`MODE: ${view.mode}`);
     out.push(`SCENE: ${JSON.stringify(view.scene)}`);
     if (view.map) out.push(`MAP: ${JSON.stringify(view.map)}`);

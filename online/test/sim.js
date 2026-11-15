@@ -7,6 +7,8 @@ const DM = require('../dm.js');
 
 /** Run every pending Dungeon Master beat with the scripted brain. */
 function pump(room) {
+  // Bots take their level-up: raise their best ability.
+  for (const q of Object.values(room.players)) while (q.pending && q.pending.length) { const best = Object.keys(q.scores).sort((x, y) => q.scores[y] - q.scores[x]).find((k) => q.scores[k] < 20); E.act(room, q.id, { t: 'levelup', choice: 'asi', ability: best }); }
   let n = 0;
   for (let req = E.dmBegin(room, 'test'); req; req = E.dmBegin(room, 'test')) {
     assert.ok(req.user.length < 16000, `prompt too large: ${req.user.length}`);
@@ -257,5 +259,76 @@ function party() {
   assert.ok(!E.act(room, 'a', { t: 'drop', item: 'miners_note' }).ok, 'quest items cannot be thrown away');
   for (const id of Object.keys(E.ITEMS).slice(0, 30)) a.inv[id] = a.inv[id] || 1;
   assert.ok(!E.act(room, 'a', { t: 'buy', item: 'ring_of_might' }).ok || Object.keys(a.inv).length <= 30, 'a full pack refuses new kinds of item');
+}
+{
+  // The ten gameplay features.
+  const room = party();
+  const a = room.players.a, b = room.players.b;
+  // 1. Level-up choices
+  a.xp = 59; E.act(room, 'a', { t: 'roll', expr: 'd4' });
+  room.dm.queue.push({ pid: null, kind: 'event', text: 'won', detail: 'x' });
+  a.xp += 100; // force a level through the engine's grant path
+  const req0 = E.dmBegin(room, 'test');
+  E.dmApply(room, req0.seq, { segments: [{ speaker: 'narrator', voice: 'narrator', text: 'Well done.' }], check: { needed: false }, effects: [{ type: 'xp', target: 'party', tier: 'minor' }], scene: { location: room.scene.location, ambience: 'tavern', shop: true, layout: 'tavern', features: [] }, combat: { start: false, enemies: [] }, suggestions: [], memory: '' }, { ai: true, trusted: true });
+  assert.ok(a.pending.length >= 1 && a.pending[0].options.some((o) => o.id === 'asi'), 'a level brings a choice');
+  const before = a.scores.DEX;
+  assert.ok(!E.act(room, 'a', { t: 'levelup', choice: 'asi' }).ok, 'ASI needs an ability');
+  assert.ok(E.act(room, 'a', { t: 'levelup', choice: 'asi', ability: 'DEX' }).ok && a.scores.DEX === before + 2);
+  // 2. Campaign arc, 7. reputation and companions (through DM effects)
+  E.act(room, 'b', { t: 'intent', kind: 'say', text: 'Join us, Garrett.' });
+  const r1 = E.dmBegin(room, 'test');
+  E.dmApply(room, r1.seq, { segments: [{ speaker: 'Foreman Garrett', voice: 'gruff', text: 'Aye. I owe them that much.' }], check: { needed: false }, effects: [
+    { type: 'chapter', name: 'Chapter 1: Into the Mine' }, { type: 'threat', name: 'The Rune Warden wakes', tier: 'minor', status: 'active' },
+    { type: 'reputation', name: 'Thornhaven', mood: 'friendly' }, { type: 'npc', name: 'Foreman Garrett', mood: 'friendly' }, { type: 'companion', name: 'Foreman Garrett', status: 'active' }],
+    scene: { location: room.scene.location, ambience: 'tavern', shop: true, layout: 'tavern', features: [] }, combat: { start: false, enemies: [] }, suggestions: [], memory: '' }, { ai: true });
+  assert.strictEqual(room.story.chapter, 'Chapter 1: Into the Mine');
+  assert.ok(room.story.threat && room.story.threat.value === 1);
+  assert.strictEqual(room.story.rep.Thornhaven, 1);
+  assert.ok(room.story.companion && room.story.companion.name === 'Foreman Garrett', 'a friendly NPC can join');
+  // 8. Host tools: redo the last AI reply, pause, mood, encounter
+  assert.ok(room.canRedo !== false && room._undo, 'an AI reply can be redone');
+  assert.ok(!E.act(room, 'b', { t: 'regen' }).ok, 'only the host redoes');
+  assert.ok(E.act(room, 'a', { t: 'regen' }).ok && !room.story.companion && !room.story.chapter && room.dm.queue.length >= 1, 'redo rolls the reply back and asks again');
+  pump(room);
+  assert.ok(E.act(room, 'a', { t: 'pause' }).ok && room.dm.paused);
+  E.act(room, 'a', { t: 'intent', kind: 'do', text: 'look around' });
+  assert.ok(!E.dmNeeded(room), 'a paused DM is not called');
+  assert.ok(E.act(room, 'a', { t: 'pause' }).ok && !room.dm.paused); pump(room);
+  if (room.dm.check) { E.act(room, room.dm.check.pid, { t: 'roll' }); pump(room); }
+  assert.ok(E.act(room, 'a', { t: 'opts', mood: 'eerie' }).ok && room.opts.mood === 'eerie');
+  // 3. Rests: short rests spend hit dice
+  const A = room.players.a; // redo replaced the player objects
+  A.hp = 5; const hd = A.hd; const sr = E.act(room, 'a', { t: 'shortrest' });
+  assert.ok(sr.ok && A.hp > 5 && A.hd === hd - 1, 'a short rest spends a hit die');
+  // Encounter, 4. opportunity attacks, 5. conditions, 9. death saves
+  assert.ok(E.act(room, 'a', { t: 'encounter', level: 'hard' }).ok && room.phase === 'combat');
+  const c = room.combat;
+  // Put an enemy next to the acting hero and walk away: free hit (unless Rogue/Monk).
+  const hero = room.players[c.turn];
+  const foe = c.enemies.find((e) => e.alive);
+  const spots = E.reachable(room, hero.id);
+  const adj = spots.find((q) => E.dist(q, hero.pos) === 1);
+  if (adj && hero.cls !== 'Rogue') {
+    foe.pos = { x: adj.x, y: adj.y };
+    const away = E.reachable(room, hero.id).filter((q) => E.dist(q, foe.pos) > 1).sort((x, y) => E.dist(y, hero.pos) - E.dist(x, hero.pos))[0];
+    const hp = hero.hp;
+    if (away) { E.act(room, hero.id, { t: 'move', x: away.x, y: away.y }); assert.ok(hero.hp < hp || !hero.alive, 'leaving reach provokes an opportunity attack'); }
+  }
+  // Death saves: drop a hero and run their turn.
+  const victim = room.players[room.order.find((id) => id !== room.combat.turn)];
+  victim.hp = 0; victim.alive = false; victim.dying = { s: 0, f: 0, stable: false };
+  Object.values(room.players).forEach((q) => { if (q !== victim) { q.hp = q.maxHp = 9999; } });
+  let guard = 0;
+  while (room.phase === 'combat' && victim.dying && !victim.dying.stable && !victim.dead && victim.alive === false && guard++ < 30) {
+    const t = room.combat.turn;
+    const er = E.act(room, t, { t: 'endturn' }); if (!er.ok) { console.log('ENDTURN FAIL', er.error, t, victim.id); break; }
+  }
+  assert.ok(victim.alive || victim.dead || (victim.dying && victim.dying.stable) || room.phase !== 'combat', 'death saves resolve');
+  if (!room.log.some((e) => /death save/.test(e.text))) console.log('DS', room.phase, guard, JSON.stringify(victim.dying), victim.alive, room.combat && room.combat.turn, victim.id, room.log.slice(-5).map((e) => e.text).join(' | '));
+  assert.ok(room.log.some((e) => /death save/.test(e.text)), 'death saves are rolled');
+  // 10. Achievements
+  assert.ok(Array.isArray(room.achievements));
+  // 6. Named magic items exist with quirks
+  assert.ok(E.UNIQUES.every((id) => E.ITEMS[id] && E.ITEMS[id].quirk));
 }
 console.log('ok');

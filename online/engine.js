@@ -44,6 +44,19 @@
     arcane_focus: { name: 'Arcane Focus', type: 'tool', description: 'A crystal that thrums with borrowed power.', value: 10, equippable: false, slot: null, stats: {}, effects: [] },
     druidic_focus: { name: 'Sprig of Mistletoe', type: 'tool', description: 'Druidic focus, still green.', value: 1, equippable: false, slot: null, stats: {}, effects: [] },
     pact_tome: { name: 'Pact Tome', type: 'tool', description: 'The handwriting in the margins is not yours.', value: 0, equippable: false, slot: null, stats: {}, effects: [] },
+    // Rare and named items: found on bosses and in rare chests, each with a quirk.
+    emberbrand: { name: 'Emberbrand', type: 'weapon', description: 'A blade that never quite stops smouldering. It hums when you are angry.', value: 420, rarity: 'rare', equippable: true, slot: 'weapon', stats: { attack: 7 }, proc: { burn: 3 }, quirk: 'Hits burn for +3 fire damage.', effects: [] },
+    frostbite_dirk: { name: 'Frostbite Dirk', type: 'weapon', description: 'Rime forms on the hilt in summer. It prefers to be held left-handed.', value: 300, rarity: 'rare', equippable: true, slot: 'weapon', stats: { attack: 5 }, proc: { frost: 1 }, quirk: 'Hits slow the target.', effects: [] },
+    thirsting_blade: { name: 'The Thirsting Blade', type: 'weapon', description: 'Black steel that drinks. It whispers compliments at night.', value: 450, rarity: 'rare', equippable: true, slot: 'weapon', stats: { attack: 6 }, proc: { drain: 3 }, quirk: 'Hits heal you for 3.', effects: [] },
+    stormcaller_bow: { name: 'Stormcaller', type: 'weapon', description: 'A bow strung with something that crackles. Thunder follows every shot.', value: 480, rarity: 'rare', equippable: true, slot: 'weapon', stats: { attack: 6 }, ranged: 7, proc: { burn: 2 }, quirk: 'Shots crackle for +2 lightning damage.', effects: [] },
+    oathkeeper: { name: 'Oathkeeper', type: 'weapon', description: 'A paladin\'s sword that grows heavier when you lie.', value: 600, rarity: 'epic', equippable: true, slot: 'weapon', stats: { attack: 9 }, quirk: 'Simply excellent.', effects: [] },
+    wyrmbone_staff: { name: 'Wyrmbone Staff', type: 'weapon', description: 'Carved from a dragon\'s rib. Spells cast through it come out warm.', value: 500, rarity: 'rare', equippable: true, slot: 'weapon', stats: { attack: 3, magic_damage: 4 }, quirk: 'Spells deal +4 damage.', effects: [] },
+    dragonscale_mail: { name: 'Dragonscale Mail', type: 'armor', description: 'Shed scales stitched into a coat. Smells faintly of smoke.', value: 650, rarity: 'epic', equippable: true, slot: 'armor', stats: { defense: 10 }, quirk: 'Light as leather, hard as plate.', effects: [] },
+    owl_mantle: { name: 'Mantle of the Owl', type: 'armor', description: 'A feathered cloak that rustles a warning before ambushes.', value: 380, rarity: 'rare', equippable: true, slot: 'armor', stats: { defense: 5, attack: 1 }, quirk: 'Its wearer is never quite surprised.', effects: [] },
+    aegis_of_dawn: { name: 'Aegis of Dawn', type: 'armor', description: 'A shield painted with a sunrise that brightens when you are hurt.', value: 520, rarity: 'rare', equippable: true, slot: 'offhand', stats: { defense: 5 }, quirk: 'Shines in the dark.', effects: [] },
+    fox_ring: { name: 'Ring of the Fox', type: 'trinket', description: 'A copper ring shaped like a sleeping fox. Things go missing near it.', value: 350, rarity: 'rare', equippable: true, slot: 'trinket', stats: { attack: 2, defense: 1 }, quirk: 'Lucky, mostly.', effects: [] },
+    last_light: { name: 'Amulet of the Last Light', type: 'trinket', description: 'A candle-flame trapped in glass. It flickers when death is near.', value: 400, rarity: 'rare', equippable: true, slot: 'trinket', stats: { defense: 3 }, quirk: 'Death saves are easier (+3).', effects: [] },
+    gamblers_coin: { name: 'Gambler\'s Coin', type: 'trinket', description: 'Two-headed. Or two-tailed. It depends who asks.', value: 300, rarity: 'rare', equippable: true, slot: 'trinket', stats: { attack: 3, defense: -1 }, quirk: 'Hits harder, guards worse.', effects: [] },
     buckler: { name: 'Buckler', type: 'armor', description: 'A small round shield strapped to the forearm.', value: 15, rarity: 'common', equippable: true, slot: 'offhand', stats: { defense: 1 }, effects: [] },
     shield: { name: 'Shield', type: 'armor', description: 'Oak boards bound in iron, scarred from use.', value: 35, rarity: 'common', equippable: true, slot: 'offhand', stats: { defense: 2 }, effects: [] },
     tower_shield: { name: 'Tower Shield', type: 'armor', description: 'Tall enough to hide behind, heavy enough to regret.', value: 120, rarity: 'uncommon', equippable: true, slot: 'offhand', stats: { defense: 4 }, effects: [] },
@@ -168,6 +181,29 @@
 
   const SHOP = ['health_potion', 'mana_potion', 'greater_health_potion', 'strength_elixir', 'iron_sword', 'leather_armor', 'steel_longsword', 'chainmail', 'buckler', 'shield', 'lucky_charm', 'ring_of_might', 'amulet_of_warding'];
   const SLOTS = ['weapon', 'armor', 'offhand', 'trinket'];
+  const UNIQUES = ['emberbrand', 'frostbite_dirk', 'thirsting_blade', 'stormcaller_bow', 'oathkeeper', 'wyrmbone_staff', 'dragonscale_mail', 'owl_mantle', 'aegis_of_dawn', 'fox_ring', 'last_light', 'gamblers_coin'];
+  const FEATS = {
+    tough: { name: 'Tough', desc: '+2 maximum HP per level, now and later.' },
+    brawler: { name: 'Brawler', desc: '+2 attack.' },
+    warded: { name: 'Warded', desc: '+1 defense.' },
+    swift: { name: 'Swift', desc: '+1 square of movement.' },
+    arcane: { name: 'Arcane Adept', desc: '+20 mana and spells deal +2 damage.' },
+    medic: { name: 'Medic', desc: 'All healing you give restores 4 more.' },
+    sentinel: { name: 'Sentinel', desc: 'Enemies that leave your reach take a free hit from you.' },
+  };
+  const ACHIEVEMENTS = {
+    first_blood: { name: 'First Blood', desc: 'The party won its first fight.' },
+    giant_slayer: { name: 'Giant Slayer', desc: 'Struck the final blow on a boss.' },
+    natural_20: { name: 'Natural 20', desc: 'Rolled a perfect 20 on a check.' },
+    survivor: { name: 'Back from the Brink', desc: 'Survived three death saves or rose on a 20.' },
+    level_5: { name: 'Seasoned', desc: 'Reached level 5.' },
+    deep_pockets: { name: 'Deep Pockets', desc: 'Carried 500 gold at once.' },
+    explorer: { name: 'Explorer', desc: 'The party has walked five different maps.' },
+    treasure_hunter: { name: 'Treasure Hunter', desc: 'Opened five chests.' },
+    silver_tongue: { name: 'Silver Tongue', desc: 'Passed five Charisma checks.' },
+    collector: { name: 'Collector', desc: 'Owned a rare or epic item.' },
+    legend: { name: 'Legend', desc: 'The party finished an adventure.' },
+  };
   const CAPACITY = 20;                                      // different kinds of item a pack holds (stacks)
   const sellPrice = (id) => (own(ITEMS, id) && ITEMS[id].type !== 'quest' ? Math.floor((ITEMS[id].value || 0) / 2) : 0);
   const ABILITY_NAMES = DM.ABILITIES;
@@ -295,7 +331,7 @@
     c.equip.forEach((it) => { p.eq[ITEMS[it].slot] = it; });
     p.gold = rnd(10, 40) + BACKGROUNDS[bg].gold;
     p.spells = (c.spells || (own(DATA.startingSpells, cls) ? DATA.startingSpells[cls] : [])).filter((id) => own(SPELLS, id));
-    p.used = {};
+    p.used = {}; p.hd = 1; p.feats = []; p.pending = []; p.stats = {}; p.dying = null; p.dead = false;
     p.cds = {}; p.fx = []; p.alive = true; p.level = 1; p.xp = 0;
     if (room.phase === 'combat' && room.combat && !room.combat.order.includes(p.id)) room.combat.order.push(p.id);
     return null;
@@ -317,7 +353,7 @@
     for (const slot of SLOTS) { const it = c.eq[slot] && ITEMS[c.eq[slot]]; if (it && it.stats && it.stats[stat]) s += it.stats[stat]; }
     return s;
   }
-  const atkOf = (c) => Math.max(1, c.atk + gearStat(c, 'attack') + fxSum(c, 'str') - fxSum(c, 'weak') - fxSum(c, 'slow'));
+  const atkOf = (c) => Math.max(1, c.atk + gearStat(c, 'attack') + fxSum(c, 'str') - fxSum(c, 'weak') - fxSum(c, 'slow') - fxSum(c, 'fear') - fxSum(c, 'blind'));
   const defOf = (c) => Math.max(0, c.def + gearStat(c, 'defense') + fxSum(c, 'guard') - fxSum(c, 'exposed'));
 
   /** Apply raw damage through defense, as Character.take_damage does. */
@@ -326,10 +362,27 @@
     const dmg = Math.max(1, Math.round(raw) - defOf(target));
     target.hp = Math.max(0, target.hp - dmg);
     if (target.hp <= 0 && target.race === 'Half-Orc' && target.used && !target.used.relentless) { target.used.relentless = 1; target.hp = 1; }
-    if (target.hp <= 0) target.alive = false;
+    if (target.hp <= 0) {
+      target.alive = false;
+      if (target.cls) target.dying = { s: 0, f: 0, stable: false };
+    }
     return dmg;
   }
+  /** Award an achievement once per hero (or once for the party when pid is null). */
+  function award(room, id, pid) {
+    if (!ACHIEVEMENTS[id]) return;
+    room.achievements = room.achievements || [];
+    if (room.achievements.some((a) => a.id === id && a.who === (pid || 'party'))) return;
+    room.achievements.push({ id, who: pid || 'party', at: Date.now() });
+    const who = pid && room.players[pid] ? room.players[pid].name : 'The party';
+    say(room, 'sys', `Achievement — ${ACHIEVEMENTS[id].name}: ${who}. ${ACHIEVEMENTS[id].desc}`, { award: id });
+  }
+  const bump = (p, k) => { p.stats = p.stats || {}; p.stats[k] = (p.stats[k] || 0) + 1; return p.stats[k]; };
+  const medicBonus = (healer) => (healer && healer.feats && healer.feats.includes('medic') ? 4 : 0);
+
   function heal(target, amount) {
+    // Healing a fallen (but not dead) hero brings them back.
+    if (!target.alive && target.cls && !target.dead) { target.alive = true; target.dying = null; target.hp = 0; }
     const before = target.hp;
     target.hp = Math.min(target.maxHp, target.hp + Math.max(0, Math.round(amount)));
     return target.hp - before;
@@ -345,7 +398,7 @@
 
   const SPEED = {};
   const ESPEED = { Goblin: 6, Wolf: 8, Bandit: 6, Cultist: 6, Skeleton: 5, Spider: 6, Orc: 6, Wraith: 6, Ogre: 5, Boss: 5 };
-  const speedOf = (p) => (p && CLASSES[p.cls] && CLASSES[p.cls].speed) || 6;
+  const speedOf = (p) => ((p && CLASSES[p.cls] && CLASSES[p.cls].speed) || 6) + (p && p.feats && p.feats.includes('swift') ? 1 : 0);
   const K = (pos) => Maps.key(pos.x, pos.y);
 
   function layoutFor(room, wanted) { return Maps.LAYOUTS.includes(wanted) ? wanted : (Maps.FROM_AMBIENCE[room.scene.ambience] || 'dungeon'); }
@@ -451,10 +504,23 @@
         ? `${label} is out of reach: ${gap} more square${gap === 1 ? '' : 's'} than you can cover. Move closer, or end your turn.`
         : `You cannot get to ${label} from here.`;
     }
+    const from = p.pos;
     p.pos = { x: best.x, y: best.y };
-    if (room.phase === 'combat') room.combat.left = Math.max(0, room.combat.left - best.d);
+    if (room.phase === 'combat') { room.combat.left = Math.max(0, room.combat.left - best.d); opportunity(room, p, from); if (!p.alive) { tickFx(p); advance(room); return null; } }
     Maps.reveal(m, [p.pos]);
     return null;
+  }
+
+  /** Moving away from enemies next to you gives each of them a free swing (not for Rogues and Monks). */
+  function opportunity(room, p, from) {
+    if (room.phase !== 'combat' || !from || ['Rogue', 'Monk'].includes(p.cls)) return;
+    livingEnemies(room).forEach((e) => {
+      if (!p.alive || !e.pos || hasFx(e, 'stun')) return;
+      if (Maps.dist(e.pos, from) <= 1 && Maps.dist(e.pos, p.pos) > 1) {
+        say(room, 'foe', `${e.name} strikes at ${p.name} as they pull away — ${hit(p, atkOf(e))} damage.`, { hurt: p.id });
+        if (!p.alive) say(room, 'foe', `${p.name} falls!`);
+      }
+    });
   }
 
   function doMove(room, p, a) {
@@ -469,8 +535,9 @@
     if (!Maps.walkable(m, x, y)) return 'You cannot stand there.';
     const path = findPath(room, p, { x, y }, moveBudget(room, p));
     if (!path) return room.phase === 'combat' ? `Too far: you have ${room.combat.left} square${room.combat.left === 1 ? '' : 's'} of movement left.` : 'You cannot get there from here.';
+    const from = p.pos;
     p.pos = { x, y };
-    if (room.phase === 'combat') room.combat.left -= path.length;
+    if (room.phase === 'combat') { room.combat.left -= path.length; opportunity(room, p, from); if (!p.alive) { tickFx(p); advance(room); } }
     Maps.reveal(m, [p.pos]);
     return null;
   }
@@ -508,7 +575,9 @@
     if (obj.kind === 'chest') {
       if (obj.used) return 'The chest is empty.';
       obj.used = true;
+      if (bump(p, 'chests') >= 5) award(room, 'treasure_hunter', p.id);
       const loot = rollLoot(room.story.stage >= 3 && Math.random() < 0.35 ? 'chest_rare' : 'chest_common');
+      if (room.story.stage >= 3 && Math.random() < 0.2) loot[pick(UNIQUES)] = 1;
       giveLoot(room, p, loot);
       say(room, 'sys', `${p.name} opens the chest: ${lootText(loot) || 'nothing but dust'}.`);
       return null;
@@ -538,8 +607,13 @@
     for (const c of seen.values()) if (c.d > 0 && !b.all.has(Maps.key(c.x, c.y)) && heroes.some((h) => Maps.dist(h.pos, c) <= 1) && (!goal || c.d < goal.d)) goal = c;
     if (!goal) return null;
     const path = Maps.trace(seen, Maps.key(goal.x, goal.y));
-    const steps = Math.min(path.length, ESPEED[e.type] || 6);
-    if (steps > 0) e.pos = path[steps - 1];
+    const steps = Math.min(path.length, (ESPEED[e.type] || 6) - (hasFx(e, 'slow') ? 2 : 0));
+    if (steps > 0) {
+      const from = e.pos;
+      e.pos = path[steps - 1];
+      heroes.filter((h) => h.alive && h.feats && h.feats.includes('sentinel') && Maps.dist(h.pos, from) <= 1 && Maps.dist(h.pos, e.pos) > 1).forEach((h) => strike(room, h, e, atkOf(h), `${h.name} catches ${e.name} as it moves for {d} damage.`));
+      if (!e.alive) return null;
+    }
     return adjacent();
   }
   function findPlayer(room, name) {
@@ -559,6 +633,7 @@
   const packFull = (p, item) => !own(p.inv, item) && Object.keys(p.inv).length >= CAPACITY;
   /** Put loot in a hero's pack, or in the party stash when the pack is full. */
   function stow(room, p, item, qty) {
+    if (own(ITEMS, item) && ['rare', 'epic'].includes(ITEMS[item].rarity)) award(room, 'collector', p.id);
     if (!packFull(p, item)) { addItem(p, item, qty); return true; }
     room.stash = room.stash || {};
     room.stash[item] = (room.stash[item] || 0) + qty;
@@ -594,14 +669,58 @@
         p.xp -= p.level * 60;
         p.level += 1;
         const c = CLASSES[p.cls];
-        p.maxHp += c.hpPerLevel; p.atk += 1; p.maxMana += 10;
-        if (p.alive) { p.hp = Math.min(p.maxHp, p.hp + c.hpPerLevel + 6); p.mana = Math.min(p.maxMana, p.mana + 20); }
-        let line = `${p.name} reaches level ${p.level}! +${c.hpPerLevel} max HP, +1 attack.`;
-        const spell = c.learn[p.level];
-        if (spell && SPELLS[spell] && !p.spells.includes(spell)) { p.spells.push(spell); line += ` Learned ${SPELLS[spell].name}.`; }
-        say(room, 'sys', line, { up: p.id });
+        const gain = c.hpPerLevel + (p.feats && p.feats.includes('tough') ? 2 : 0) + Math.max(0, abilityMod(p.scores.CON));
+        p.maxHp += gain; p.maxMana += 10; p.hd = (p.hd || 0) + 1;
+        if (p.alive) { p.hp = Math.min(p.maxHp, p.hp + gain + 6); p.mana = Math.min(p.maxMana, p.mana + 20); }
+        p.pending = (p.pending || []).concat([{ level: p.level, options: levelOptions(p) }]);
+        say(room, 'sys', `${p.name} reaches level ${p.level}! +${gain} max HP. Choose an upgrade in your Pack tab.`, { up: p.id });
+        if (p.level >= 5) award(room, 'level_5', p.id);
       }
     });
+  }
+
+  /** What a hero may pick at a new level: an ability increase, a spell, or a feat. */
+  function levelOptions(p) {
+    const c = CLASSES[p.cls];
+    const out = [{ id: 'asi', name: 'Ability Score Improvement', desc: '+2 to one ability score (up to 20).' }];
+    const learn = c.learn || {};
+    const spell = Object.keys(learn).map(Number).sort((a, b) => a - b).filter((lv) => lv <= p.level).map((lv) => learn[lv]).find((sid) => own(SPELLS, sid) && !p.spells.includes(sid));
+    if (spell) out.push({ id: 'spell:' + spell, name: `Learn ${SPELLS[spell].name}`, desc: SPELLS[spell].description });
+    const feats = Object.keys(FEATS).filter((f) => !(p.feats || []).includes(f));
+    const start = (p.level * 3 + p.name.length) % Math.max(1, feats.length);
+    for (let i = 0; i < Math.min(2, feats.length); i++) { const f = feats[(start + i) % feats.length]; out.push({ id: 'feat:' + f, name: FEATS[f].name, desc: FEATS[f].desc }); }
+    return out;
+  }
+  function chooseLevel(room, p, a) {
+    if (!p.pending || !p.pending.length) return 'You have no upgrade to choose.';
+    const offer = p.pending[0];
+    const opt = offer.options.find((o) => o.id === a.choice);
+    if (!opt) return 'Pick one of the offered upgrades.';
+    if (opt.id === 'asi') {
+      const ab = ABILITY_NAMES.includes(a.ability) ? a.ability : null;
+      if (!ab) return 'Choose which ability to raise.';
+      if (p.scores[ab] >= 20) return `${ab} is already at the maximum of 20.`;
+      const before = abilityMod(p.scores[ab]);
+      p.scores[ab] = Math.min(20, p.scores[ab] + 2);
+      const diff = abilityMod(p.scores[ab]) - before;
+      if (diff > 0 && CLASSES[p.cls].primary && CLASSES[p.cls].primary[0] === ab) p.atk += diff;
+      if (diff > 0 && ab === 'CON') { p.maxHp += diff * p.level; p.hp += diff * p.level; }
+      say(room, 'sys', `${p.name} grows stronger: ${ab} is now ${p.scores[ab]}.`);
+    } else if (opt.id.startsWith('spell:')) {
+      const sid = opt.id.slice(6);
+      if (!p.spells.includes(sid)) p.spells.push(sid);
+      say(room, 'sys', `${p.name} learns ${SPELLS[sid].name}.`);
+    } else {
+      const f = opt.id.slice(5);
+      p.feats = (p.feats || []).concat([f]);
+      if (f === 'tough') { p.maxHp += 2 * p.level; p.hp += 2 * p.level; }
+      if (f === 'brawler') p.atk += 2;
+      if (f === 'warded') p.def += 1;
+      if (f === 'arcane') { p.maxMana += 20; p.mana += 20; }
+      say(room, 'sys', `${p.name} gains the ${FEATS[f].name} feat.`);
+    }
+    p.pending.shift();
+    return null;
   }
 
   // ---------- combat flow ----------
@@ -635,8 +754,15 @@
       enemies.forEach((e, i) => { e.pos = spots[i] || more[i - spots.length] || null; });
       Maps.reveal(room.map, enemies.filter((e) => e.pos).map((e) => e.pos));
     }
+    const allies = [];
+    const comp = room.story.companion;
+    if (comp) {
+      const ally = Object.assign({}, comp, { fx: [], alive: true, hp: comp.maxHp });
+      if (room.map) ally.pos = Maps.freeNear(room.map, centre(room), new Set([...blockers(room).all].concat(enemies.filter((e) => e.pos).map((e) => K(e.pos)))), 1, 1)[0] || null;
+      allies.push(ally);
+    }
     room.phase = 'combat';
-    room.combat = Object.assign({ enemies, order, turn: null, round: 1, left: 0, acted: false }, extra || {});
+    room.combat = Object.assign({ enemies, allies, order, turn: null, round: 1, left: 0, acted: false }, extra || {});
     room.dm.check = null;
     room.dm.queue = room.dm.queue.filter((q) => q.kind !== 'do' && q.kind !== 'say');
     players(room).forEach((x) => { x.cds = {}; x.fx = x.fx.filter((f) => f.k === 'str'); x.used = {}; });
@@ -668,7 +794,25 @@
     c.left = speedOf(p);
     c.acted = false;
     room.turnSince = Date.now();
+    if (p && !p.alive && p.dying && !p.dying.stable && !p.dead) {
+      const r = d(20) + (p.eq && p.eq.trinket === 'last_light' ? 3 : 0);
+      if (r >= 20) { p.alive = true; p.hp = 1; p.dying = null; say(room, 'roll', `${p.name} makes a death save — d20: ${r}. A natural 20! ${p.name} staggers back up with 1 HP.`, { die: 20, pass: true, who: p.name }); award(room, 'survivor', p.id); return; }
+      if (r >= 10) p.dying.s += 1; else p.dying.f += r <= 1 ? 2 : 1;
+      let note = `${p.dying.s} success${p.dying.s === 1 ? '' : 'es'}, ${p.dying.f} failure${p.dying.f === 1 ? '' : 's'}.`;
+      if (p.dying.s >= 3) { p.dying.stable = true; note = 'Stable: out of the fight, but no longer dying.'; award(room, 'survivor', p.id); }
+      if (p.dying.f >= 3) { p.dead = true; note = `${p.name} has died.`; }
+      say(room, 'roll', `${p.name} makes a death save — d20: ${r}. ${r >= 10 ? 'Success' : 'Failure'}. ${note}`, { die: Math.min(20, r), pass: r >= 10, who: p.name });
+      return advance(room, guard + 1);
+    }
     if (!p || !p.alive) return advance(room, guard + 1);
+    const poison = p.fx.find((f) => f.k === 'poison');
+    if (poison) {
+      const dmg = Math.min(p.hp, poison.v || 2);
+      p.hp -= dmg;
+      say(room, 'act', `Poison burns through ${p.name}'s veins for ${dmg} damage.`, { hurt: p.id });
+      if (p.hp <= 0) { p.alive = false; p.dying = { s: 0, f: 0, stable: false }; say(room, 'foe', `${p.name} falls!`); return advance(room, guard + 1); }
+    }
+    if (hasFx(p, 'prone')) { c.left = Math.floor(c.left / 2); p.fx = p.fx.filter((f) => f.k !== 'prone'); say(room, 'act', `${p.name} gets up off the ground (half movement).`); }
     p.mana = Math.min(p.maxMana, p.mana + Math.max(5, Math.round(p.maxMana * 0.1)));
     for (const k in p.cds) { p.cds[k] -= 1; if (p.cds[k] <= 0) delete p.cds[k]; }
     p.fx = p.fx.filter((f) => f.k !== 'guard');
@@ -688,15 +832,19 @@
     if (!livingPlayers(room).length) return loseCombat(room);
     if (guard > 20) { c.turn = livingPlayers(room)[0].id; room.turnSince = Date.now(); return; }
     const idx = c.order.indexOf(c.turn);
+    // Downed heroes still get a turn: that is when they roll their death save.
+    const acts = (p) => p && (p.alive || (p.dying && !p.dying.stable && !p.dead));
     for (let i = idx + 1; i < c.order.length; i++) {
       const p = room.players[c.order[i]];
-      if (p && p.alive) return beginTurn(room, p.id, guard);
+      if (acts(p)) return beginTurn(room, p.id, guard);
     }
+    allyPhase(room);
+    if (!livingEnemies(room).length) return winCombat(room);
     enemyPhase(room);
     if (!livingPlayers(room).length) return loseCombat(room);
     if (!livingEnemies(room).length) return winCombat(room);
     c.round += 1;
-    const first = c.order.map((id) => room.players[id]).find((p) => p && p.alive);
+    const first = c.order.map((id) => room.players[id]).find(acts);
     return beginTurn(room, first.id, guard);
   }
 
@@ -745,17 +893,44 @@
       } else {
         const roll = d(6);
         say(room, 'foe', `${e.name} attacks ${t.name} (d6: ${roll}) for ${hit(t, atkOf(e) + roll)} damage.`, { hurt: t.id });
+        const cond = { Spider: ['poison', 3, 3, 'is poisoned'], Cultist: ['blind', 3, 1, 'is blinded by a flash of dark fire'], Wraith: ['fear', 2, 2, 'is gripped by dread (−2 attack)'], Wolf: ['prone', 0, 1, 'is knocked prone'], Ogre: ['prone', 0, 1, 'is knocked prone'], Boss: ['fear', 2, 2, 'is gripped by dread (−2 attack)'] }[e.type];
+        if (cond && t.alive && Math.random() < 0.3 && !(t.race === 'Dwarf' && cond[0] === 'poison')) { addFx(t, cond[0], cond[1], cond[2]); say(room, 'foe', `${t.name} ${cond[3]}.`); }
       }
       if (!t.alive) say(room, 'foe', `${t.name} falls!`);
       tickFx(e);
     }
   }
 
+  /** Companions act after the heroes: walk to the nearest enemy and hit it. */
+  function allyPhase(room) {
+    const c = room.combat;
+    (c.allies || []).forEach((al) => {
+      if (!al.alive) return;
+      const foes = livingEnemies(room);
+      if (!foes.length) return;
+      let t = foes.find((e) => !al.pos || !e.pos || Maps.dist(e.pos, al.pos) <= 1);
+      if (!t && room.map && al.pos) {
+        const b = blockers(room, null);
+        const seen = Maps.bfs(room.map, al.pos, { max: 6, blocked: b.all });
+        let goal = null;
+        for (const s2 of seen.values()) if (s2.d > 0 && foes.some((e) => e.pos && Maps.dist(e.pos, s2) <= 1) && (!goal || s2.d < goal.d)) goal = s2;
+        if (goal) { al.pos = { x: goal.x, y: goal.y }; t = foes.find((e) => e.pos && Maps.dist(e.pos, al.pos) <= 1); }
+      }
+      if (!t) return;
+      const dmg = hit(t, al.atk + d(6));
+      say(room, 'act', `${al.name} fights beside you and hits ${t.name} for ${dmg} damage.`);
+      if (!t.alive) say(room, 'act', `${t.name} falls to ${al.name}.`);
+    });
+  }
+
   function onKill(room, p, e) {
     const m = MONSTERS[e.type];
     const loot = rollLoot(m.loot);
+    if (e.boss && Math.random() < 0.85) loot[pick(UNIQUES)] = 1;
     giveLoot(room, p, loot);
     say(room, 'act', `${e.name} is slain. ${p.name} loots ${lootText(loot) || 'nothing'}.`);
+    bump(p, 'kills');
+    if (e.boss) award(room, 'giant_slayer', p.id);
     // Bigger parties meet more enemies, so each kill is worth less per head.
     grantXp(room, Math.round((m.xp * 2) / (players(room).length + 1)));
   }
@@ -768,9 +943,11 @@
     const revived = [];
     players(room).forEach((p) => {
       p.fx = []; p.cds = {};
-      if (!p.alive) { p.alive = true; p.hp = Math.max(1, Math.round(p.maxHp * 0.25)); revived.push(p.name); }
+      if (!p.alive && !p.dead) { p.alive = true; p.dying = null; p.hp = 1; revived.push(p.name); }
     });
-    say(room, 'sys', `Victory at ${room.scene.location}.${revived.length ? ` ${revived.join(' and ')} ${revived.length > 1 ? 'are' : 'is'} helped back up.` : ''}`);
+    const fallen = players(room).filter((p) => p.dead).map((p) => p.name);
+    award(room, 'first_blood', null);
+    say(room, 'sys', `Victory at ${room.scene.location}.${revived.length ? ` ${revived.join(' and ')} ${revived.length > 1 ? 'are' : 'is'} helped back up with 1 HP.` : ''}${fallen.length ? ` ${fallen.join(' and ')} did not survive: a Resurrection spell or a temple's priest can bring them back.` : ''}`);
     if (c.stageFight) room.story.stage += 1;
     if (c.keepsake) {
       const finder = pick(players(room));
@@ -778,7 +955,7 @@
     }
     room.scene.ambience = 'camp';
     room.turnSince = Date.now();
-    room.dm.queue.unshift({ pid: null, kind: 'event', text: 'won', detail: `The party won the battle at ${room.scene.location} against ${foes}.${revived.length ? ` ${revived.join(' and ')} went down in the fight and had to be revived.` : ''} Narrate the aftermath in a few sentences and continue the story.` });
+    room.dm.queue.unshift({ pid: null, kind: 'event', text: 'won', detail: `The party won the battle at ${room.scene.location} against ${foes}.${revived.length ? ` ${revived.join(' and ')} went down in the fight and had to be revived.` : ''}${fallen.length ? ` ${fallen.join(' and ')} died in the fight.` : ''} Narrate the aftermath in a few sentences and continue the story.` });
   }
 
   function loseCombat(room) {
@@ -803,8 +980,12 @@
   }
 
   function strike(room, p, e, raw, text) {
-    const dmg = hit(e, raw);
+    const w = p.eq && p.eq.weapon && ITEMS[p.eq.weapon];
+    const proc = (w && w.proc) || {};
+    const dmg = hit(e, raw + (proc.burn || 0));
     say(room, 'act', text.replace('{d}', dmg));
+    if (proc.drain && p.alive) heal(p, proc.drain);
+    if (proc.frost && e.alive) addFx(e, 'slow', 3, 2);
     if (!e.alive) onKill(room, p, e);
     return dmg;
   }
@@ -815,10 +996,10 @@
     const it = ITEMS[id];
     if (it.type !== 'consumable') return 'That item cannot be used like that.';
     const target = findTarget(room, action, 'ally') || p;
-    if (!target.alive) return `${target.name} is down — a potion will not help.`;
+    if (target.dead) return `${target.name} is dead. Only Resurrection or a temple can bring them back.`;
     const bits = [];
     it.effects.forEach((e) => {
-      if (e.type === 'heal') bits.push(`restores ${heal(target, e.value)} HP`);
+      if (e.type === 'heal') { target.fx = target.fx.filter((f) => f.k !== 'poison'); bits.push(`restores ${heal(target, e.value + medicBonus(p))} HP`); }
       else if (e.type === 'mana') { const b = target.mana; target.mana = Math.min(target.maxMana, target.mana + e.value); bits.push(`restores ${target.mana - b} mana`); }
       else if (e.type === 'buff_attack') { addFx(target, 'str', e.value, (e.duration || 3) + 1); bits.push(`grants +${e.value} attack for ${e.duration || 3} turns`); }
       else if (e.type === 'buff_defense') { addFx(target, 'guard', e.value, (e.duration || 3) + 1); bits.push(`grants +${e.value} defense`); }
@@ -834,7 +1015,7 @@
     const cdKey = 's:' + action.id;
     if (p.mana < s.mana_cost) return `Not enough mana. ${s.name} needs ${s.mana_cost}.`;
     if (p.cds[cdKey]) return `${s.name} is on cooldown for ${p.cds[cdKey]} more turn(s).`;
-    const bonus = Math.max(abilityMod(p.scores.INT), abilityMod(p.scores.CHA), abilityMod(p.scores.WIS)) + gearStat(p, 'magic_damage') + (p.race === 'Tiefling' ? 2 : 0);
+    const bonus = Math.max(abilityMod(p.scores.INT), abilityMod(p.scores.CHA), abilityMod(p.scores.WIS)) + gearStat(p, 'magic_damage') + (p.race === 'Tiefling' ? 2 : 0) + (p.feats && p.feats.includes('arcane') ? 2 : 0);
     if (s.spell_type === 'Damage') {
       if (!room.combat) return 'There is nothing to attack.';
       const primary = findTarget(room, action, 'enemy');
@@ -859,12 +1040,13 @@
       if (action.id === 'resurrection') {
         if (t.alive) return `${t.name} is still standing. Resurrection is for the fallen.`;
         p.mana -= s.mana_cost;
-        t.alive = true; t.hp = Math.min(t.maxHp, s.heal[0]); t.fx = [];
+        t.alive = true; t.dead = false; t.dying = null; t.hp = Math.min(t.maxHp, s.heal[0]); t.fx = [];
         say(room, 'act', `${p.name} casts Resurrection. ${t.name} rises with ${t.hp} HP!`, { healed: t.id });
       } else {
-        if (!t.alive) return `${t.name} is down. Only Resurrection can help now.`;
+        if (t.dead) return `${t.name} is dead. Only Resurrection can help now.`;
         p.mana -= s.mana_cost;
-        say(room, 'act', `${p.name} casts ${s.name} on ${t.id === p.id ? 'themself' : t.name}, healing ${heal(t, rnd(s.heal[0], s.heal[1]))} HP.`, { healed: t.id });
+        t.fx = t.fx.filter((f) => f.k !== 'fear');
+        say(room, 'act', `${p.name} casts ${s.name} on ${t.id === p.id ? 'themself' : t.name}, healing ${heal(t, rnd(s.heal[0], s.heal[1]) + medicBonus(p))} HP.`, { healed: t.id });
       }
     } else if (s.spell_type === 'Buff') {
       const t = findTarget(room, action, 'ally') || p;
@@ -901,6 +1083,18 @@
     const c = room.combat;
     if (c.turn !== p.id) return 'It is not your turn.';
     if (!p.alive) return 'You are down.';
+    if (a.t === 'stabilize') {
+      const t = own(room.players, a.target) ? room.players[a.target] : null;
+      if (!t || t.alive || !t.dying || t.dead) return 'Choose a dying ally.';
+      if (t.dying.stable) return `${t.name} is already stable.`;
+      const err = approach(room, p, t.pos, 1, t.name);
+      if (err) return err;
+      const chk = abilityCheck(p, 'WIS');
+      const ok = chk.total >= 10;
+      if (ok) t.dying.stable = true;
+      say(room, 'roll', `${p.name} tends to ${t.name} — ${checkText(chk, 'WIS', 10)}. ${ok ? `${t.name} is stable.` : 'Not enough.'}`, { die: chk.roll, pass: ok });
+      tickFx(p); advance(room); return null;
+    }
     if (a.t === 'endturn') { say(room, 'act', `${p.name} ends their turn.`); tickFx(p); advance(room); return null; }
     if (room.map && p.pos) {
       let tgt = null;
@@ -928,8 +1122,8 @@
         say(room, 'act', `${p.name} sings a rousing verse: ${t.id === p.id ? 'they feel' : t.name + ' feels'} unstoppable (+3 attack, ${heal(t, 5)} HP).`, { healed: t.id });
       } else if (a.id === 'heal') {
         const t = findTarget(room, a, 'ally') || p;
-        if (!t.alive) return `${t.name} is down. Only Resurrection can help now.`;
-        say(room, 'act', `${p.name} lays on hands and heals ${t.id === p.id ? 'themself' : t.name} for ${heal(t, d(20))} HP.`, { healed: t.id });
+        if (t.dead) return `${t.name} is dead. Only Resurrection can help now.`;
+        say(room, 'act', `${p.name} lays on hands and heals ${t.id === p.id ? 'themself' : t.name} for ${heal(t, d(20) + medicBonus(p))} HP.`, { healed: t.id });
       } else {
         const e = findTarget(room, a, 'enemy');
         if (a.id === 'heavy_strike') strike(room, p, e, atkOf(p) * 2, `${p.name} brings down a Heavy Strike on ${e.name} for {d} damage.`);
@@ -1008,6 +1202,8 @@
     if (!target || !target.cls) return null;
     const chk = abilityCheck(target, c.ability);
     const pass = (chk.total >= c.dc || chk.roll === 20) && chk.roll !== 1;
+    if (chk.roll === 20) award(room, 'natural_20', target.id);
+    if (pass && c.ability === 'CHA' && bump(target, 'cha') >= 5) award(room, 'silver_tongue', target.id);
     say(room, 'roll', `${target.name} rolls to ${c.reason} — ${checkText(chk, c.ability, c.dc)}. ${pass ? (chk.roll === 20 ? 'Natural 20! Success!' : 'Success!') : (chk.roll === 1 ? 'Natural 1. Failure.' : 'Failure.')}`, { die: chk.roll, pass, who: target.name });
     const branch = pass ? c.success : c.failure;
     const text = clean(branch && branch.text, 500) || (pass ? 'It works.' : 'It does not work.');
@@ -1018,11 +1214,39 @@
   }
 
   function sceneAction(room, p, a) {
-    if (a.t === 'rest') {
-      if (room.scene.rested) return 'The party has already rested here.';
+    if (a.t === 'shortrest') {
+      room.scene.short = room.scene.short || 0;
+      if (room.scene.short >= 2) return 'You have already taken two short rests here. Find a safe place for a long rest.';
+      room.scene.short += 1;
+      const DIE = { Barbarian: 12, Fighter: 10, Paladin: 10, Ranger: 10, Monk: 8, Rogue: 8, Cleric: 8, Bard: 8, Druid: 8, Warlock: 8, Wizard: 6, Sorcerer: 6 };
+      const parts = [];
+      players(room).filter((m) => m.alive).forEach((m) => {
+        if ((m.hd || 0) <= 0) { parts.push(`${m.name} has no hit dice left`); return; }
+        m.hd -= 1;
+        const got = heal(m, Math.max(1, d(DIE[m.cls] || 8) + abilityMod(m.scores.CON)));
+        m.mana = Math.min(m.maxMana, m.mana + Math.round(m.maxMana * 0.25));
+        parts.push(`${m.name} +${got} HP`);
+      });
+      say(room, 'sys', `${p.name} calls a short rest (an hour, one hit die each): ${parts.join(', ')}.`, { healed: 'party' });
+    } else if (a.t === 'rest') {
+      if (room.scene.rested) return 'The party has already taken a long rest here.';
       room.scene.rested = true;
-      players(room).forEach((m) => { m.alive = true; m.hp = Math.min(m.maxHp, m.hp + Math.ceil(m.maxHp * 0.6)); m.mana = m.maxMana; });
-      say(room, 'sys', `${p.name} calls a rest. Everyone recovers 60% HP and all mana.`, { healed: 'party' });
+      const safe = room.scene.shop || (room.map && ['tavern', 'town', 'docks', 'camp'].includes(room.map.layout));
+      players(room).forEach((m) => { if (!m.dead) { m.alive = true; m.dying = null; m.hp = m.maxHp; } m.mana = m.maxMana; m.hd = m.level; m.fx = []; });
+      say(room, 'sys', `${p.name} calls a long rest. Everyone recovers fully and regains their hit dice.`, { healed: 'party' });
+      if (!safe && Math.random() < 0.35) {
+        const lay = room.map ? room.map.layout : 'dungeon';
+        const type = { forest: 'Wolf', mountain: 'Wolf', shore: 'Bandit', cave: 'Spider', mine: 'Goblin', crypt: 'Skeleton', dungeon: 'Skeleton' }[lay] || 'Goblin';
+        say(room, 'sys', 'Your rest is cut short: something found you in the dark!');
+        startCombat(room, sanitizeEnemies(room, [{ type, name: type, count: players(room).length + 1 }]));
+      }
+    } else if (a.t === 'raise') {
+      const t = own(room.players, a.target) ? room.players[a.target] : null;
+      if (!t || !t.dead) return 'Choose a fallen companion who has died.';
+      if (!room.scene.shop) return 'You need a temple or a priest in town for that.';
+      if (p.gold < 100) return 'The priest asks 100 gold for the rite.';
+      p.gold -= 100; t.dead = false; t.dying = null; t.alive = true; t.hp = 1;
+      say(room, 'sys', `${p.name} pays 100 gold and a priest calls ${t.name} back to life.`, { healed: t.id });
     } else if (a.t === 'buy') {
       if (!room.scene.shop) return 'There is nobody here to trade with.';
       if (!SHOP.includes(a.item) || !own(ITEMS, a.item)) return 'The merchant does not stock that.';
@@ -1080,6 +1304,7 @@
         if (DIFFS.includes(a.difficulty)) room.opts.difficulty = a.difficulty;
         if (typeof a.listed === 'boolean') room.opts.listed = a.listed;
         if (typeof a.locked === 'boolean') room.opts.locked = a.locked;
+        if (['calm', 'tense', 'eerie', 'epic', 'light', ''].includes(a.mood)) room.opts.mood = a.mood;
         if (a.lang != null) room.opts.lang = clean(a.lang, 24).replace(/[^\p{L} -]/gu, '') || 'English';
       }
     } else if (a.t === 'equip') {
@@ -1133,6 +1358,28 @@
       else say(room, 'roll', `${p.name} rolls ${r.n}d${r.sides}${r.bonus ? (r.bonus > 0 ? '+' : '') + r.bonus : ''}: [${r.rolls.join(', ')}]${r.bonus ? ` ${r.bonus > 0 ? '+' : '−'} ${Math.abs(r.bonus)}` : ''} = ${r.total}`, { die: r.rolls[0] });
     } else if (a.t === 'roll') {
       err = resolveCheck(room, p);
+    } else if (a.t === 'levelup') {
+      err = chooseLevel(room, p, a);
+    } else if (a.t === 'pause') {
+      if (!isHost) err = 'Only the host can pause the Dungeon Master.';
+      else { room.dm.paused = !room.dm.paused; say(room, 'sys', room.dm.paused ? `${p.name} paused the Dungeon Master. Talk among yourselves.` : `${p.name} resumed the Dungeon Master.`); }
+    } else if (a.t === 'regen') {
+      if (!isHost) err = 'Only the host can ask the Dungeon Master to try again.';
+      else err = undoBeat(room, p);
+    } else if (a.t === 'encounter') {
+      if (!isHost) err = 'Only the host can start an encounter.';
+      else if (room.phase !== 'scene') err = 'Not right now.';
+      else {
+        const lvl = ['easy', 'medium', 'hard', 'deadly'].includes(a.level) ? a.level : 'medium';
+        const lay = room.map ? room.map.layout : 'dungeon';
+        const pool = { forest: ['Wolf', 'Goblin', 'Bandit'], mountain: ['Wolf', 'Bandit', 'Ogre'], camp: ['Wolf', 'Bandit'], shore: ['Bandit', 'Spider'], cave: ['Spider', 'Goblin', 'Orc'], mine: ['Goblin', 'Orc', 'Skeleton'], dungeon: ['Skeleton', 'Cultist', 'Orc'], crypt: ['Skeleton', 'Wraith', 'Cultist'], tavern: ['Bandit', 'Cultist'], town: ['Bandit', 'Cultist'], docks: ['Bandit', 'Spider'] }[lay] || ['Goblin'];
+        const n = players(room).length;
+        const list = [{ type: pool[0], name: pool[0], count: lvl === 'easy' ? Math.max(1, n - 1) : n }];
+        if (lvl !== 'easy') list.push({ type: pool[1], name: pool[1], count: 1 });
+        if (lvl === 'hard' || lvl === 'deadly') list.push({ type: pool[2] || 'Orc', name: pool[2] || 'Orc', count: lvl === 'deadly' ? 2 : 1 });
+        say(room, 'sys', `${p.name} calls for a ${lvl} encounter.`);
+        startCombat(room, sanitizeEnemies(room, list));
+      }
     } else if (a.t === 'kick') {
       if (!isHost) err = 'Only the host can remove a player.';
       else if (!own(room.players, a.pid) || a.pid === pid) err = 'Choose another player.';
@@ -1203,7 +1450,7 @@
       else {
         room.phase = 'scene';
         room.scene.rested = true;
-        players(room).forEach((m) => { m.alive = true; m.hp = m.maxHp; m.mana = m.maxMana; m.gold = Math.floor(m.gold / 2); m.fx = []; m.cds = {}; });
+        players(room).forEach((m) => { m.alive = true; m.dead = false; m.dying = null; m.hd = m.level; m.hp = m.maxHp; m.mana = m.maxMana; m.gold = Math.floor(m.gold / 2); m.fx = []; m.cds = {}; });
         placeParty(room);
         say(room, 'sys', 'The party regroups: everyone is back on their feet, and half of each purse is gone.');
         queueIntent(room, { pid: null, kind: 'event', text: 'lost', detail: `The whole party was beaten at ${room.scene.location}. They wake somewhere safe nearby, patched up and poorer. Narrate the waking and offer a way forward.` });
@@ -1235,6 +1482,7 @@
       opts: room.opts, mode: room.phase === 'combat' ? 'combat' : 'story',
       scene: { location: room.scene.location, ambience: room.scene.ambience, shop: room.scene.shop },
       party: players(room).map((p) => ({
+        conditions: (p.fx || []).filter((f) => ['poison', 'fear', 'prone', 'blind', 'stun'].includes(f.k)).map((f) => f.k), dead: !!p.dead,
         name: p.name, race: p.race, class: p.cls, background: p.background, pronouns: p.pronouns || undefined, personality: p.traits || undefined, level: p.level, hp: `${p.hp}/${p.maxHp}`, gold: p.gold, down: !p.alive,
         concept: p.bio || undefined, items: Object.keys(p.inv).map((id) => (ITEMS[id] ? ITEMS[id].name : id)), keepsakes: p.keep,
       })),
@@ -1249,6 +1497,8 @@
         return i.detail ? { kind: i.kind, text: i.text, detail: i.detail } : { player: p ? p.name : 'table', kind: i.kind, text: i.text };
       }),
       stage: room.story.stage, players: players(room).length,
+      chapter: room.story.chapter || '', threat: room.story.threat || null, reputation: room.story.rep || {}, companion: room.story.companion ? room.story.companion.name : '',
+      mood: room.opts.mood || '',
       map: room.map ? {
         layout: room.map.layout,
         things: room.map.objects.map((o) => `${o.name} (${o.kind})`),
@@ -1259,7 +1509,7 @@
 
   /** True when a Dungeon Master call should be started now. */
   function dmNeeded(room) {
-    return !room.dm.busy && !room.dm.check && room.dm.queue.length > 0 && (room.phase === 'scene' || room.phase === 'combat');
+    return !room.dm.busy && !room.dm.paused && !room.dm.check && room.dm.queue.length > 0 && (room.phase === 'scene' || room.phase === 'combat');
   }
 
   /** Claim the next beat. Returns { seq, system, user, schema, view } or null. */
@@ -1308,6 +1558,31 @@
       if (opts.cosmetic && !story) return;
 
       if (e.type === 'npc') upsertNpc(room, e.name || e.target, { mood: e.mood, note: e.note });
+      else if (e.type === 'chapter') {
+        const t = clean(e.name, 60);
+        if (t && t !== room.story.chapter) { room.story.chapter = t; room.story.chapters = (room.story.chapters || []).concat([t]).slice(-12); say(room, 'sys', `Chapter: ${t}`, { chapter: t }); }
+      } else if (e.type === 'threat') {
+        const name = clean(e.name, 60);
+        let th = room.story.threat;
+        if (th && e.status === 'done') { say(room, 'sys', `The threat is over: ${th.name}.`); room.story.threat = null; return; }
+        if (name && (!th || (e.status === 'active' && !same(th.name, name)))) { th = room.story.threat = { name, value: 0, max: 6 }; say(room, 'sys', `A threat looms: ${name}.`); }
+        if (th) { const step = { minor: 1, standard: 2, major: 3 }[tier]; th.value = Math.max(0, Math.min(th.max, th.value + (e.status === 'failed' ? -step : step))); if (th.value >= th.max) say(room, 'sys', `${th.name} has come to a head.`); }
+      } else if (e.type === 'reputation') {
+        const place = clean(e.name || e.target, 40);
+        if (!place) return;
+        room.story.rep = room.story.rep || {};
+        const v = (room.story.rep[place] || 0) + (e.mood === 'hostile' ? -1 : e.mood === 'friendly' ? 1 : 0);
+        room.story.rep[place] = Math.max(-3, Math.min(3, v));
+        say(room, 'sys', `Reputation in ${place}: ${['hated', 'distrusted', 'disliked', 'unknown', 'liked', 'respected', 'celebrated'][room.story.rep[place] + 3]}.`);
+      } else if (e.type === 'companion') {
+        const name = clean(e.name || e.target, 28);
+        const npc = room.story.npcs.find((n) => same(n.name, name));
+        if (e.status === 'failed' || e.status === 'done') { if (room.story.companion) { say(room, 'sys', `${room.story.companion.name} leaves the party.`); room.story.companion = null; } return; }
+        if (!npc || npc.mood !== 'friendly' || room.story.companion) return;
+        const lv = partyLevel(room);
+        room.story.companion = { id: 'ally', name: npc.name, voice: npc.voice, hp: 24 + 6 * lv, maxHp: 24 + 6 * lv, atk: 5 + lv, def: 2, fx: [], alive: true };
+        say(room, 'sys', `${npc.name} joins the party as a companion and will fight beside you.`);
+      }
       else if (e.type === 'quest') {
         const title = clean(e.name, 60);
         if (!title) return;
@@ -1423,10 +1698,28 @@
     });
   }
 
+  /** The host's "try that again": put the table back as it was before the last AI reply. */
+  function undoBeat(room, p) {
+    const u = room._undo;
+    if (!u) return 'There is no Dungeon Master reply to redo.';
+    if (room.dm.busy) return 'The Dungeon Master is already thinking.';
+    if (room.seq !== u.after) return 'Too much has happened since that reply to redo it.';
+    const back = JSON.parse(u.state);
+    ['phase', 'scene', 'story', 'map', 'combat', 'stash', 'achievements'].forEach((k) => { room[k] = back[k]; });
+    for (const id in back.players) if (room.players[id]) room.players[id] = back.players[id];
+    room.dm.check = null; room.dm.chips = [];
+    room.log = room.log.filter((e) => e.id <= u.before);
+    room.dm.queue = u.intents.concat(room.dm.queue).slice(0, 10);
+    delete room._undo;
+    say(room, 'sys', `${p.name} asks the Dungeon Master to take that last part again.`);
+    return null;
+  }
+
   function dmApply(room, seq, resp, opts) {
     opts = opts || {};
     if (!room.dm.busy || room.dm.busy.seq !== seq) return { stale: true };
     if (!resp || typeof resp !== 'object') return { invalid: true };
+    const undo = { state: JSON.stringify({ phase: room.phase, scene: room.scene, story: room.story, map: room.map, combat: room.combat, stash: room.stash || {}, achievements: room.achievements || [], players: room.players }), before: room.seq, intents: (room.dm.busy.intents || []).slice() };
     const cosmetic = room.phase === 'combat';
 
     const segs = [];
@@ -1496,12 +1789,20 @@
     if (memory) { room.story.notes.push(memory); if (room.story.notes.length > 12) room.story.notes.shift(); }
     room.story.beats += 1;
     room.dm.busy = null;
+    // The threat grows by itself while the party dawdles.
+    const th = room.story.threat;
+    if (th && th.value < th.max && room.story.beats % 15 === 0) { th.value += 1; if (th.value >= th.max) say(room, 'sys', `${th.name} has come to a head.`); }
+    if (room.map && room.map.id >= 5) award(room, 'explorer', null);
+    players(room).forEach((q) => { if (q.gold >= 500) award(room, 'deep_pockets', q.id); });
+    if (room.story.quests.some((q) => q.status === 'done')) award(room, 'legend', null);
 
     if (!cosmetic && !room.dm.check && resp.combat && typeof resp.combat === 'object' && resp.combat.start === true) {
       const stage = opts.trusted && resp._stageFight ? { stageFight: true, keepsake: resp._keepsake || null } : null;
       startCombat(room, sanitizeEnemies(room, resp.combat.enemies), stage);
     }
     room.updated = Date.now();
+    undo.after = room.seq;
+    if (opts.ai) room._undo = undo; else delete room._undo;
     return { ok: true, entry: entry.id };
   }
 
@@ -1518,7 +1819,7 @@
 
   return {
     ITEMS, SPELLS, CLASSES, ABILITIES, MONSTERS, SHOP, ABILITY_NAMES, ADVENTURES, MAX_PLAYERS, IDLE_SKIP_MS, CHECK_TIMEOUT_MS, DM_STALE_MS,
-    SLOTS, CAPACITY, sellPrice, RACES, BACKGROUNDS, LOOK, STANDARD_ARRAY, POINT_COST, abilitiesOf,
+    SLOTS, CAPACITY, sellPrice, FEATS, ACHIEVEMENTS, UNIQUES, RACES, BACKGROUNDS, LOOK, STANDARD_ARRAY, POINT_COST, abilitiesOf,
     newRoom, addPlayer, act, atkOf, defOf, locationOf, dmNeeded, dmBegin, dmApply, dmFallback, dmView,
     LAYOUTS: Maps.LAYOUTS, walkable: Maps.walkable, pathTo, reachable, rangeOf, speedOf, dist: Maps.dist,
   };

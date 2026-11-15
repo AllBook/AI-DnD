@@ -163,7 +163,10 @@ function snapshot(entry) {
   const check = room.dm.check ? { pid: room.dm.check.pid, ability: room.dm.check.ability, dc: room.dm.check.dc, reason: room.dm.check.reason, at: room.dm.check.at } : null;
   const seatKeys = {};
   for (const [pid, st] of entry.seats) seatKeys[pid] = [st.th, st.rh];
-  return JSON.stringify(Object.assign({}, room, { dm: Object.assign({}, room.dm, { check }), seatKeys }));
+  const out = Object.assign({}, room, { dm: Object.assign({}, room.dm, { check }), seatKeys });
+  delete out._undo;
+  out.canRedo = !!room._undo;
+  return JSON.stringify(out);
 }
 
 function broadcast(entry) {
@@ -412,7 +415,11 @@ const server = http.createServer(async (req, res) => {
       });
       res.write('retry: 2000\n\n');
       const client = { res, pid };
+      const quiet = !entry.clients.size && Date.now() - entry.room.updated > 45 * 60 * 1000;
       entry.clients.add(client);
+      if (quiet && ['scene', 'combat'].includes(entry.room.phase) && !entry.room.dm.queue.some((q) => q.kind === 'recap')) {
+        entry.room.dm.queue.push({ pid: null, kind: 'recap', text: 'The party is back after a break. Give a short "previously on" recap of the story so far and remind them where they are and what they were doing.' });
+      }
       broadcast(entry);
       pump(entry);
       req.on('close', () => { entry.clients.delete(client); broadcast(entry); });
